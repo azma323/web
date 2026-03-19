@@ -73,11 +73,16 @@ function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
+      // Appwrite থেকে সেশন ডিলিট করার চেষ্টা করবে
       await account.deleteSession('current');
+    } catch (error) { 
+      // 404 বা অন্য এরর আসলে কিছুই বলবে না, চুপচাপ ইগনোর করবে
+      console.log("No active session found in backend."); 
+    } finally {
+      // এরর আসুক বা না আসুক, ইউজারকে লগইন পেজে পাঠিয়ে দেবেই
       window.location.href = '/login'; 
-    } catch (error) { alert("Logout failed!"); }
+    }
   };
-
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catName) return alert("Category name is required!");
