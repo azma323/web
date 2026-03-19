@@ -71,15 +71,16 @@ function AdminDashboard() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // 🚀 Bulletproof Logout Function
   const handleLogout = async () => {
     try {
-      // Appwrite থেকে সেশন ডিলিট করার চেষ্টা করবে
+      // Appwrite-কে সেশন ডিলিট করতে বলবে
       await account.deleteSession('current');
-    } catch (error) { 
-      // 404 বা অন্য এরর আসলে কিছুই বলবে না, চুপচাপ ইগনোর করবে
-      console.log("No active session found in backend."); 
+    } catch (error: any) {
+      // 404 এরর আসলে কনসোলে শুধু একটা মেসেজ দেবে, কিন্তু পেজ আটকাবে না
+      console.log("Appwrite session already cleared or blocked:", error.message);
     } finally {
-      // এরর আসুক বা না আসুক, ইউজারকে লগইন পেজে পাঠিয়ে দেবেই
+      // এরর আসুক বা না আসুক, ইউজারকে জোর করে লগইন পেজে পাঠিয়ে দেবেই!
       window.location.href = '/login'; 
     }
   };
