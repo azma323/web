@@ -15,7 +15,7 @@ function ProductDetails() {
   // 🔴 Modal, Form & Delivery States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deliveryArea, setDeliveryArea] = useState<'inside' | 'outside'>('inside'); // নতুন স্টেট
+  const [deliveryArea, setDeliveryArea] = useState<'inside' | 'outside'>('inside');
   const [formData, setFormData] = useState({
     name: '', phone: '', address: '', profession: '', businessType: ''
   });
@@ -61,7 +61,7 @@ function ProductDetails() {
   // 🎯 ক্যাটাগরি ও ডায়নামিক ডেলিভারি লজিক
   let actionType = 'order'; 
   let buttonText = 'অর্ডার করুন';
-  let deliveryCharge = deliveryArea === 'inside' ? 60 : 120; // 🔴 রেডিও বাটন অনুযায়ী চার্জ বদলাবে
+  let deliveryCharge = deliveryArea === 'inside' ? 60 : 120; // রেডিও বাটন অনুযায়ী চার্জ
 
   if (catNameStr.includes('apartment') || catNameStr.includes('এপার্টমেন্ট') || catNameStr.includes('flat') || catNameStr.includes('ফ্ল্যাট') || catNameStr.includes('real estate')) {
     actionType = 'booking';
@@ -76,7 +76,6 @@ function ProductDetails() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // 🔴 অ্যাডমিন প্যানেলে দেখার জন্য এক্সট্রা ইনফরমেশন আপডেট করা হলো
     const extraInfo = actionType === 'order' 
       ? `ডেলিভারি এরিয়া: ${deliveryArea === 'inside' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}` 
       : `পেশা: ${formData.profession || 'N/A'}, ব্যবসার ধরন: ${formData.businessType || 'N/A'}`;
@@ -97,62 +96,75 @@ function ProductDetails() {
       alert(`ধন্যবাদ ${formData.name}! আপনার ${buttonText} সফলভাবে সম্পন্ন হয়েছে। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।`);
       setIsModalOpen(false);
       setFormData({ name: '', phone: '', address: '', profession: '', businessType: '' });
-      setDeliveryArea('inside'); // ডিফল্ট অবস্থায় ফিরিয়ে আনা
+      setDeliveryArea('inside');
     } catch (error: any) {
       console.error(error);
-      alert(`দুঃখিত, সাবমিট করতে সমস্যা হয়েছে। দয়া করে Appwrite চেক করুন।`);
+      alert(`দুঃখিত, সাবমিট করতে সমস্যা হয়েছে। ദয়া করে Appwrite চেক করুন।`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-12 font-sans relative">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-white py-6 px-4 sm:px-6 lg:px-12 font-sans relative">
+      <div className="max-w-[1400px] mx-auto">
         
-        <Link to="/" className="inline-flex items-center text-slate-500 hover:text-indigo-600 font-semibold mb-8 transition-colors group">
-          <span className="bg-white p-2 rounded-full shadow-sm mr-3 border border-slate-100 group-hover:-translate-x-1 transition-all">←</span>
-          পূর্বের পেজে ফিরে যান
+        <Link to="/" className="inline-flex items-center text-slate-500 hover:text-indigo-600 font-medium mb-6 transition-colors text-sm">
+          <span className="mr-2">←</span> পূর্বের পেজে ফিরে যান
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start">
+        {/* 🌟 Amazon Style Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           
-          <div className="flex flex-col gap-4">
-            <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-slate-100 bg-white">
-              <img src={mainImage} alt={product.title} onClick={() => setViewFullScreen(mainImage)} className="w-full h-[400px] lg:h-[500px] object-cover hover:scale-105 transition-transform duration-700 cursor-zoom-in" />
-              <div className="absolute top-6 left-6 z-20"><span className="bg-white/95 backdrop-blur-md px-5 py-2 rounded-full text-sm font-bold text-indigo-700 shadow-lg uppercase tracking-wider">{catNameStr || 'Premium'}</span></div>
-            </div>
+          {/* 📸 Left Side: Image Gallery (Amazon Style) */}
+          <div className="lg:col-span-5 flex flex-col md:flex-row gap-4 h-auto md:h-[500px]">
+            
+            {/* Vertical Thumbnails */}
             {product.images && product.images.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-2 py-2 hide-scrollbar">
+              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto pb-2 md:pb-0 md:pr-2 w-full md:w-20 shrink-0 hide-scrollbar order-2 md:order-1">
                 {product.images.map((imgUrl: string, index: number) => (
-                  <img key={index} src={imgUrl} alt="gallery" onClick={() => setMainImage(imgUrl)} className={`h-24 w-32 object-cover rounded-xl cursor-pointer transition-all border-2 flex-shrink-0 ${mainImage === imgUrl ? 'border-indigo-600 opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`} />
+                  <img 
+                    key={index} 
+                    src={imgUrl} 
+                    alt={`thumbnail-${index}`} 
+                    onMouseEnter={() => setMainImage(imgUrl)} // ম্যাজিক: হোভার করলেই ছবি চেঞ্জ
+                    onClick={() => setMainImage(imgUrl)} 
+                    className={`h-16 w-16 md:h-16 md:w-full object-cover rounded-md cursor-pointer transition-all border-2 flex-shrink-0 ${mainImage === imgUrl ? 'border-orange-500 shadow-sm' : 'border-slate-200 opacity-70 hover:opacity-100'}`} 
+                  />
                 ))}
               </div>
             )}
+
+            {/* Main Large Image */}
+            <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center p-4 order-1 md:order-2 group border border-slate-100">
+              <img src={mainImage} alt={product.title} onClick={() => setViewFullScreen(mainImage)} className="max-w-full max-h-full object-contain cursor-zoom-in" />
+              <div className="absolute top-4 left-4 z-20"><span className="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold uppercase shadow-sm">{catNameStr || 'Premium'}</span></div>
+            </div>
           </div>
 
-          <div className="flex flex-col h-full justify-center">
-            <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight mb-6">{product.title}</h1>
+          {/* 📝 Right Side: Product Info */}
+          <div className="lg:col-span-7 flex flex-col h-full py-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-snug mb-2">{product.title}</h1>
             
+            <div className="border-b border-slate-200 pb-4 mb-4">
+              <p className="text-sm font-medium text-slate-500 mb-1">Price</p>
+              <div className="flex items-start gap-1">
+                <span className="text-xl font-medium text-slate-800 mt-1">৳</span>
+                <span className="text-4xl font-medium text-slate-900">{product.price.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
             <div className="mb-8">
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">নির্ধারিত মূল্য</p>
-              <p className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">
-                ৳ {product.price.toLocaleString('en-IN')}
-              </p>
+              <h3 className="text-base font-bold text-slate-900 mb-2">About this item</h3>
+              <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{product.description}</p>
             </div>
 
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 mb-10 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-indigo-500 to-blue-400"></div>
-              <h3 className="text-xl font-bold text-slate-800 mb-4">বিস্তারিত বিবরণ</h3>
-              <p className="text-slate-600 text-lg leading-relaxed whitespace-pre-wrap">{product.description}</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-5 mt-auto">
-              <button onClick={() => setIsModalOpen(true)} className="flex-1 bg-slate-900 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transform hover:-translate-y-1 transition-all shadow-xl flex justify-center items-center gap-2">
+            <div className="flex flex-col sm:flex-row gap-3 mt-auto lg:w-2/3">
+              <button onClick={() => setIsModalOpen(true)} className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-slate-900 px-8 py-3.5 rounded-full font-bold text-sm transition-all shadow-sm flex justify-center items-center gap-2">
                 {buttonText}
               </button>
               {product.youtube_url && (
-                <a href={product.youtube_url} target="_blank" rel="noreferrer" className="flex-1 bg-red-50 text-red-600 border border-red-200 px-8 py-4 rounded-xl font-bold text-lg hover:bg-red-600 hover:text-white transform hover:-translate-y-1 transition-all flex justify-center items-center gap-2">
+                <a href={product.youtube_url} target="_blank" rel="noreferrer" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-8 py-3.5 rounded-full font-bold text-sm transition-all shadow-sm flex justify-center items-center gap-2">
                   ভিডিও দেখুন
                 </a>
               )}
@@ -161,7 +173,7 @@ function ProductDetails() {
         </div>
       </div>
 
-      {/* 🌟 ডায়নামিক পপ-আপ ফর্ম (Modal) */}
+      {/* 🌟 ডায়নামিক পপ-আপ ফর্ম (আপনার আগের ১০০% পারফেক্ট কোড) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -245,8 +257,8 @@ function ProductDetails() {
       )}
 
       {viewFullScreen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/95 p-4" onClick={() => setViewFullScreen(null)}>
-          <img src={viewFullScreen} alt="Enlarged" className="max-w-full max-h-[90vh] rounded-xl" onClick={e => e.stopPropagation()} />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 p-4" onClick={() => setViewFullScreen(null)}>
+          <img src={viewFullScreen} alt="Enlarged" className="max-w-full max-h-[90vh] object-contain rounded-md" onClick={e => e.stopPropagation()} />
         </div>
       )}
 

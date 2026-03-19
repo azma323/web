@@ -5,6 +5,7 @@ import Home from './Home';
 import AdminDashboard from './AdminDashboard';
 import Login from './Login';
 import ProductDetails from './ProductDetails';
+import Contact from './Contact';
 
 function App() {
   const [user, setUser] = useState<any>(null);
@@ -36,6 +37,7 @@ function App() {
           element={user ? <AdminDashboard /> : <Navigate to="/login" />} 
         />
         <Route path="/product/:id" element={<ProductDetails />} />
+        <Route path="/contact" element={<Contact />} />
       </Routes>
     </BrowserRouter>
   );
