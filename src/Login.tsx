@@ -4,77 +4,82 @@ import { account } from './appwrite';
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return alert("Please enter email and password!");
-    
-    setIsLoggingIn(true);
+    setLoading(true);
+    setError('');
+
     try {
-      // 🛠️ মেইন ফিক্স: প্রথমে যেকোনো আটকে থাকা সেশন জোড় করে মুছে ফেলা
+      // 🔴 ম্যাজিক ট্রিক: লগইন করার আগে পুরোনো সেশন ক্লিয়ার করার চেষ্টা করবে। 
+      // কিন্তু সেশন না পেয়ে 404 এরর দিলে পেজ আটকাবে না, চুপচাপ পরের ধাপে যাবে!
       try {
         await account.deleteSession('current');
-        console.log("Cleared old stuck session.");
-      } catch (err) {
-        // আগে থেকে সেশন না থাকলে এই এরর ইগনোর করবে
+      } catch (sessionError) {
+        console.log('No previous session found, proceeding to login...');
       }
 
-      // 🚀 এবার একদম ফ্রেশভাবে নতুন লগইন সেশন তৈরি করবে
+      // নতুন লগইন
       await account.createEmailPasswordSession(email, password);
       
-      // লগইন সফল হলে পুরো পেজ রিলোড দিয়ে ড্যাশবোর্ডে পাঠাবে (যাতে App.tsx নতুন ডাটা পায়)
-      window.location.href = '/admin'; 
+      // সফল হলে ড্যাশবোর্ডে পাঠাবে
+      window.location.href = '/admin';
       
-    } catch (error: any) {
-      console.error("Appwrite Error:", error.message);
-      
-      // যদি তারপরেও সেশন এরর আসে, তবে সরাসরি ড্যাশবোর্ডে পাঠিয়ে দেবে
-      if (error.message.includes('prohibited')) {
-         window.location.href = '/admin';
-      } else {
-         alert(`লগইন ব্যর্থ হয়েছে: ${error.message}`); 
-      }
+    } catch (err: any) {
+      console.error(err);
+      // এখানে শুধু আসল লগইন এরর দেখাবে (যেমন- পাসওয়ার্ড ভুল)
+      setError(err.message || 'Login failed. Check your email and password.');
     } finally {
-      setIsLoggingIn(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 font-sans px-4">
-      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-200">
-        <h2 className="text-3xl font-black text-slate-800 mb-2 text-center">Admin Login</h2>
-        <p className="text-slate-400 text-center mb-8 font-medium">Enter your credentials</p>
-        
-        <form onSubmit={handleLogin} className="space-y-6">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+      <div className="bg-white p-10 rounded-[2rem] shadow-xl border border-slate-100 w-full max-w-md">
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-3xl font-black mx-auto mb-4 shadow-lg">B</div>
+          <h2 className="text-3xl font-black text-slate-800">Admin Login</h2>
+          <p className="text-slate-500 font-medium mt-2">Welcome back! Please enter your details.</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold text-center mb-6 border border-red-100">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-2 ml-1">Email Address</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Email Address</label>
             <input 
               type="email" 
-              placeholder="admin@example.com" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold transition-all"
+              required 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none bg-slate-50 transition-colors" 
+              placeholder="admin@bdtplatform.com" 
             />
           </div>
-          
           <div>
-            <label className="block text-xs font-black uppercase text-slate-400 mb-2 ml-1">Password</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Password</label>
             <input 
               type="password" 
+              required 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none bg-slate-50 transition-colors" 
               placeholder="••••••••" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold transition-all"
             />
           </div>
-
           <button 
-            type="submit"
-            disabled={isLoggingIn}
-            className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all transform hover:-translate-y-1 disabled:bg-slate-300 disabled:translate-y-0"
+            type="submit" 
+            disabled={loading} 
+            className="w-full bg-slate-900 text-white font-black py-4 rounded-xl mt-4 hover:bg-indigo-600 transition-all disabled:bg-slate-400 shadow-lg"
           >
-            {isLoggingIn ? 'AUTHENTICATING...' : 'UNLOCK DASHBOARD'}
+            {loading ? 'VERIFYING...' : 'SECURE LOGIN'}
           </button>
         </form>
       </div>
