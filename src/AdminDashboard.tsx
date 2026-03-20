@@ -14,6 +14,45 @@ interface RequestItem {
   total_price: number; $createdAt: string;
 }
 
+const cropAndCompressImage = async (file: File, targetSize = 1000, quality = 0.8): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        const ctx = canvas.getContext('2d');
+
+        const size = Math.min(img.width, img.height);
+        const xOffset = (img.width - size) / 2;
+        const yOffset = (img.height - size) / 2;
+
+        if (ctx) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetSize, targetSize);
+          ctx.drawImage(img, xOffset, yOffset, size, size, 0, 0, targetSize, targetSize);
+        }
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg', lastModified: Date.now() });
+            resolve(newFile);
+          } else {
+            reject(new Error('Canvas to Blob failed'));
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+
 function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [categories, setCategories] = useState<any[]>([]);
@@ -31,7 +70,9 @@ function AdminDashboard() {
   const [pDesc, setPDesc] = useState('');
   const [pYoutube, setPYoutube] = useState('');
   const [pCatId, setPCatId] = useState('');
-  const [imageFiles, setImageFiles] = useState<FileList | null>(null);
+  
+  // 🔴 ম্যাজিক: এখন এটি আর FileList নেই, এটি একটি Array হয়ে গেছে যাতে ছবি জমিয়ে রাখা যায়
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const fetchData = async () => {
@@ -80,8 +121,9 @@ function AdminDashboard() {
       const uploadedImageUrls: string[] = [];
       if (imageFiles && imageFiles.length > 0) {
         for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i];
-          const uploadedFile = await storage.createFile(BUCKET_ID, ID.unique(), file);
+          const originalFile = imageFiles[i];
+          const processedFile = await cropAndCompressImage(originalFile); 
+          const uploadedFile = await storage.createFile(BUCKET_ID, ID.unique(), processedFile);
           const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
           uploadedImageUrls.push(fileUrl);
         }
@@ -110,7 +152,7 @@ function AdminDashboard() {
   };
 
   const cancelEdit = () => {
-    setEditingId(null); setPTitle(''); setPPrice(''); setPDesc(''); setPYoutube(''); setPCatId(''); setImageFiles(null);
+    setEditingId(null); setPTitle(''); setPPrice(''); setPDesc(''); setPYoutube(''); setPCatId(''); setImageFiles([]);
     const fileInput = document.getElementById('image-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   };
@@ -121,11 +163,10 @@ function AdminDashboard() {
     catch (error: any) { alert(`Delete failed: ${error.message}`); } 
   };
 
-  // 🔴 ম্যাজিক ১: অর্ডারটাকে ডিলিট না করে "Done" হিসেবে মার্ক করা (যাতে কাস্টমার ডাটা থেকে যায়)
   const handleMarkAsDone = async (docId: string, currentType: string) => {
     try {
       await databases.updateDocument(DATABASE_ID, REQUEST_COLLECTION_ID, docId, {
-        request_type: currentType + '_done' // নামের শেষে _done লাগিয়ে দেওয়া হলো
+        request_type: currentType + '_done' 
       });
       fetchData();
     } catch (error: any) {
@@ -133,7 +174,6 @@ function AdminDashboard() {
     }
   };
 
-  // 🔴 ম্যাজিক ২: কাস্টমার এবং তার সব ডাটা (Done + Pending) একসাথে ডিলিট করার ফাংশন
   const handleDeleteCustomer = async (phone: string) => {
     if (!window.confirm("সতর্কতা: আপনি কি নিশ্চিত? এই কাস্টমারকে ডিলিট করলে তার করা সমস্ত অর্ডার এবং মেসেজও ডিলিট হয়ে যাবে!")) return;
     
@@ -148,8 +188,7 @@ function AdminDashboard() {
     } 
   };
 
-  // 🌟 Filtered Lists
-  const pendingRequests = requests.filter(r => !r.request_type.endsWith('_done')); // শুধু নতুন অর্ডারগুলো দেখাবে
+  const pendingRequests = requests.filter(r => !r.request_type.endsWith('_done')); 
   
   const uniqueCustomers = Array.from(
     requests.reduce((map, r) => {
@@ -211,6 +250,7 @@ function AdminDashboard() {
             <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div></div>
           ) : (
             <>
+              {/* ... (Dashboard, Requests, Customers, Categories Tabs remain identical) ... */}
               {activeTab === 'dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="bg-white p-8 rounded-3xl border border-slate-200">
@@ -228,7 +268,6 @@ function AdminDashboard() {
                 </div>
               )}
 
-              {/* 🌟 Requests Tab (Shows only pending ones) */}
               {activeTab === 'requests' && (
                 <div className="space-y-6">
                   <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><span>🔔</span> New Orders & Messages</h3>
@@ -239,12 +278,7 @@ function AdminDashboard() {
                         {pendingRequests.map(r => (
                           <tr key={r.$id} className="border-b hover:bg-slate-50 transition-colors">
                             <td className="p-6">
-                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                                r.request_type === 'booking' ? 'bg-blue-100 text-blue-700' : 
-                                r.request_type === 'order' ? 'bg-emerald-100 text-emerald-700' : 
-                                r.request_type === 'message' ? 'bg-orange-100 text-orange-700' : 
-                                'bg-purple-100 text-purple-700'
-                              }`}>
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${r.request_type === 'booking' ? 'bg-blue-100 text-blue-700' : r.request_type === 'order' ? 'bg-emerald-100 text-emerald-700' : r.request_type === 'message' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
                                 {r.request_type}
                               </span>
                               <p className="text-xs text-slate-500 mt-3 font-bold">{new Date(r.$createdAt).toLocaleDateString('en-GB')}</p>
@@ -252,41 +286,26 @@ function AdminDashboard() {
                             <td className="p-6">
                               <p className="font-black text-slate-800 text-lg">{r.customer_name}</p>
                               <p className="font-bold text-slate-600 mt-1 flex items-center gap-1">📞 {r.phone}</p>
-                              {r.request_type !== 'message' && (
-                                <p className="text-xs text-slate-500 mt-2 font-medium bg-slate-100 p-2 rounded-lg inline-block">{r.address}</p>
-                              )}
+                              {r.request_type !== 'message' && <p className="text-xs text-slate-500 mt-2 font-medium bg-slate-100 p-2 rounded-lg inline-block">{r.address}</p>}
                             </td>
                             <td className="p-6">
                               <p className="font-bold text-slate-800">{r.product_name}</p>
                               {r.total_price > 0 && <p className="font-black text-emerald-600 mt-2">Total Bill: ৳{r.total_price.toLocaleString('en-IN')}</p>}
-                              
-                              {r.extra_info && r.extra_info !== 'পেশা: N/A, ব্যবসার ধরন: N/A' && (
-                                <p className="text-xs text-slate-600 mt-2 border-l-2 border-orange-300 pl-3 whitespace-pre-wrap bg-orange-50/50 p-2 rounded-r-lg">
-                                  {r.extra_info}
-                                </p>
-                              )}
+                              {r.extra_info && r.extra_info !== 'পেশা: N/A, ব্যবসার ধরন: N/A' && <p className="text-xs text-slate-600 mt-2 border-l-2 border-orange-300 pl-3 whitespace-pre-wrap bg-orange-50/50 p-2 rounded-r-lg">{r.extra_info}</p>}
                             </td>
                             <td className="p-6 text-right space-x-2 whitespace-nowrap">
-                              {/* 🔴 নতুন দুইটা বাটন: Done এবং Delete */}
-                              <button onClick={() => handleMarkAsDone(r.$id, r.request_type)} className="bg-emerald-50 text-emerald-600 font-black border border-emerald-200 hover:bg-emerald-600 hover:text-white px-4 py-2 rounded-lg transition-colors text-xs shadow-sm">
-                                ✅ Mark Done
-                              </button>
-                              <button onClick={() => handleDelete(REQUEST_COLLECTION_ID, r.$id)} className="bg-white text-red-500 font-bold border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-xs">
-                                🗑️ Delete
-                              </button>
+                              <button onClick={() => handleMarkAsDone(r.$id, r.request_type)} className="bg-emerald-50 text-emerald-600 font-black border border-emerald-200 hover:bg-emerald-600 hover:text-white px-4 py-2 rounded-lg transition-colors text-xs shadow-sm">✅ Mark Done</button>
+                              <button onClick={() => handleDelete(REQUEST_COLLECTION_ID, r.$id)} className="bg-white text-red-500 font-bold border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-xs">🗑️ Delete</button>
                             </td>
                           </tr>
                         ))}
-                        {pendingRequests.length === 0 && (
-                          <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No new pending orders right now!</td></tr>
-                        )}
+                        {pendingRequests.length === 0 && <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No new pending orders right now!</td></tr>}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
 
-              {/* 🌟 Customers Tab (Shows everyone, including done orders) */}
               {activeTab === 'customers' && (
                 <div className="space-y-6">
                   <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><span>👥</span> Customer Directory</h3>
@@ -309,22 +328,17 @@ function AdminDashboard() {
                             </td>
                             <td className="p-6 text-right">
                                <p className="text-xs font-bold text-slate-400 mb-3">Last Active: {new Date(c.lastActive).toLocaleDateString('en-GB')}</p>
-                               <button onClick={() => handleDeleteCustomer(c.phone)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded-md transition-colors border border-red-100 hover:border-red-300 text-xs">
-                                 🗑️ Delete Customer
-                               </button>
+                               <button onClick={() => handleDeleteCustomer(c.phone)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded-md transition-colors border border-red-100 hover:border-red-300 text-xs">🗑️ Delete Customer</button>
                             </td>
                           </tr>
                         ))}
-                        {uniqueCustomers.length === 0 && (
-                          <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No active customers found yet!</td></tr>
-                        )}
+                        {uniqueCustomers.length === 0 && <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No active customers found yet!</td></tr>}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
 
-              {/* Categories Tab */}
               {activeTab === 'categories' && ( 
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                  <div className="bg-white p-8 rounded-3xl border border-slate-200 h-fit">
@@ -354,11 +368,7 @@ function AdminDashboard() {
                          <tr key={c.$id} className="border-b">
                            <td className="p-6 font-bold flex items-center gap-2">
                              {c.name}
-                             {c.parent_id && (
-                               <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-widest border border-orange-100">
-                                 Sub of: {categories.find(p => p.$id === c.parent_id)?.name || 'Unknown'}
-                               </span>
-                             )}
+                             {c.parent_id && <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-widest border border-orange-100">Sub of: {categories.find(p => p.$id === c.parent_id)?.name || 'Unknown'}</span>}
                            </td>
                            <td className="p-6 text-right"><button onClick={() => handleDelete(CATEGORY_COLLECTION_ID, c.$id)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-1 rounded-md">Delete</button></td>
                          </tr>
@@ -389,18 +399,51 @@ function AdminDashboard() {
                       
                       <input type="text" value={pYoutube} onChange={(e) => setPYoutube(e.target.value)} placeholder="YouTube Video URL (Optional)" className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white" />
                       
+                      {/* 🔴 আপডেট হওয়া ছবি সিলেক্ট এবং লাইভ প্রিভিউ সেকশন */}
                       <div className="md:col-span-2">
                         <label className="block text-xs font-black uppercase text-slate-400 mb-2 ml-1">
-                          Upload Images (Select Multiple) {editingId && <span className="text-orange-500 lowercase normal-case">- leave empty to keep existing</span>}
+                          Upload Images (Select one by one or multiple) {editingId && <span className="text-orange-500 lowercase normal-case">- leave empty to keep existing</span>}
                         </label>
-                        <input id="image-upload" type="file" multiple accept="image/*" onChange={(e) => setImageFiles(e.target.files)} className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100" />
+                        <input 
+                          id="image-upload" 
+                          type="file" 
+                          multiple 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              const newFiles = Array.from(e.target.files);
+                              setImageFiles(prev => [...prev, ...newFiles]); // লিস্টে নতুনগুলো যোগ হবে
+                              e.target.value = ''; // ইনপুট ক্লিয়ার, যাতে একই ছবি চাইলে আবার সিলেক্ট করা যায়
+                            }
+                          }} 
+                          className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100" 
+                        />
+
+                        {/* 🖼️ ছবির লাইভ প্রিভিউ এবং ডিলিট করার অপশন */}
+                        {imageFiles.length > 0 && (
+                          <div className="flex gap-4 flex-wrap mt-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+                            {imageFiles.map((file, idx) => (
+                              <div key={idx} className="relative w-24 h-24 border-2 border-slate-200 rounded-xl overflow-hidden group shadow-sm bg-white">
+                                <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
+                                <button 
+                                  type="button" 
+                                  onClick={() => setImageFiles(prev => prev.filter((_, i) => i !== idx))} 
+                                  className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-all shadow-md"
+                                  title="Remove Image"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       
                       <textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="Detailed Description..." className="md:col-span-2 px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white min-h-[120px]" />
                       
                       <div className="md:col-span-2 flex gap-4">
                         <button type="submit" disabled={isUploading} className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 transition-all text-white font-black py-5 rounded-xl shadow-lg flex justify-center items-center gap-2">
-                          {isUploading ? 'SAVING...' : (editingId ? 'UPDATE LISTING' : 'PUBLISH LISTING')}
+                          {isUploading ? 'CROPPING & SAVING...' : (editingId ? 'UPDATE LISTING' : 'PUBLISH LISTING')}
                         </button>
                       </div>
                     </form>
