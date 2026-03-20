@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ID } from 'appwrite';
 import { databases, account, storage, DATABASE_ID, PRODUCT_COLLECTION_ID, CATEGORY_COLLECTION_ID, REQUEST_COLLECTION_ID, BUCKET_ID } from './appwrite';
 
@@ -22,8 +22,6 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [viewImage, setViewImage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  const navigate = useNavigate();
 
   const [catName, setCatName] = useState('');
   const [catParentId, setCatParentId] = useState(''); 
@@ -53,9 +51,14 @@ function AdminDashboard() {
   useEffect(() => { fetchData(); }, []);
 
   const handleLogout = async () => {
-    try { await account.deleteSession('current'); } 
-    catch (error) { console.log("No session."); } 
-    finally { navigate('/login'); }
+    try {
+      await account.deleteSession('current');
+    } catch (error) { 
+      console.log("No active session found."); 
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace('/'); 
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -113,10 +116,56 @@ function AdminDashboard() {
   };
 
   const handleDelete = async (colId: string, docId: string) => {
-    if (!window.confirm("Are you sure?")) return;
+    if (!window.confirm("Are you sure? This will be permanently deleted.")) return;
     try { await databases.deleteDocument(DATABASE_ID, colId, docId); fetchData(); } 
     catch (error: any) { alert(`Delete failed: ${error.message}`); } 
   };
+
+  // 🔴 ম্যাজিক ১: অর্ডারটাকে ডিলিট না করে "Done" হিসেবে মার্ক করা (যাতে কাস্টমার ডাটা থেকে যায়)
+  const handleMarkAsDone = async (docId: string, currentType: string) => {
+    try {
+      await databases.updateDocument(DATABASE_ID, REQUEST_COLLECTION_ID, docId, {
+        request_type: currentType + '_done' // নামের শেষে _done লাগিয়ে দেওয়া হলো
+      });
+      fetchData();
+    } catch (error: any) {
+      alert(`Failed to mark as done: ${error.message}`);
+    }
+  };
+
+  // 🔴 ম্যাজিক ২: কাস্টমার এবং তার সব ডাটা (Done + Pending) একসাথে ডিলিট করার ফাংশন
+  const handleDeleteCustomer = async (phone: string) => {
+    if (!window.confirm("সতর্কতা: আপনি কি নিশ্চিত? এই কাস্টমারকে ডিলিট করলে তার করা সমস্ত অর্ডার এবং মেসেজও ডিলিট হয়ে যাবে!")) return;
+    
+    try {
+      const customerRequests = requests.filter(r => r.phone === phone);
+      await Promise.all(customerRequests.map(r => 
+        databases.deleteDocument(DATABASE_ID, REQUEST_COLLECTION_ID, r.$id)
+      ));
+      fetchData(); 
+    } catch (error: any) { 
+      alert(`Delete failed: ${error.message}`); 
+    } 
+  };
+
+  // 🌟 Filtered Lists
+  const pendingRequests = requests.filter(r => !r.request_type.endsWith('_done')); // শুধু নতুন অর্ডারগুলো দেখাবে
+  
+  const uniqueCustomers = Array.from(
+    requests.reduce((map, r) => {
+      if (r.phone && r.customer_name) {
+        if (!map.has(r.phone)) {
+          map.set(r.phone, { name: r.customer_name, phone: r.phone, address: r.address, totalOrders: 1, totalSpent: r.total_price, lastActive: r.$createdAt });
+        } else {
+          const existing = map.get(r.phone);
+          existing.totalOrders += 1;
+          existing.totalSpent += r.total_price;
+          if (new Date(r.$createdAt) > new Date(existing.lastActive)) existing.lastActive = r.$createdAt;
+        }
+      }
+      return map;
+    }, new Map()).values()
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 flex font-sans text-slate-900">
@@ -128,10 +177,17 @@ function AdminDashboard() {
         </div>
         <nav className="flex-1 p-4 space-y-2 mt-6">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full text-left px-4 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-3 ${activeTab === 'dashboard' ? 'bg-orange-500 shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}><span>📊</span> Dashboard</button>
+          
           <button onClick={() => setActiveTab('requests')} className={`w-full text-left px-4 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-3 ${activeTab === 'requests' ? 'bg-orange-500 shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}>
             <span>🔔</span> Orders & Messages 
-            {requests.length > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-black">{requests.length}</span>}
+            {pendingRequests.length > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-black">{pendingRequests.length}</span>}
           </button>
+          
+          <button onClick={() => setActiveTab('customers')} className={`w-full text-left px-4 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-3 ${activeTab === 'customers' ? 'bg-orange-500 shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}>
+            <span>👥</span> Customers 
+            <span className="ml-auto bg-slate-700 text-slate-300 text-[10px] px-2 py-1 rounded-full font-black">{uniqueCustomers.length}</span>
+          </button>
+          
           <button onClick={() => setActiveTab('categories')} className={`w-full text-left px-4 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-3 ${activeTab === 'categories' ? 'bg-orange-500 shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}><span>📁</span> Categories</button>
           <button onClick={() => setActiveTab('products')} className={`w-full text-left px-4 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-3 ${activeTab === 'products' ? 'bg-orange-500 shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}><span>📦</span> Products</button>
         </nav>
@@ -162,24 +218,27 @@ function AdminDashboard() {
                     <h2 className="text-5xl font-black">{products.length}</h2>
                   </div>
                   <div className="bg-orange-500 text-white p-8 rounded-3xl shadow-lg border border-orange-400">
-                    <p className="text-xs font-bold text-orange-200 uppercase mb-1">New Orders & Messages</p>
-                    <h2 className="text-5xl font-black">{requests.length}</h2>
+                    <p className="text-xs font-bold text-orange-200 uppercase mb-1">New Pending Orders</p>
+                    <h2 className="text-5xl font-black">{pendingRequests.length}</h2>
+                  </div>
+                  <div className="bg-slate-800 text-white p-8 rounded-3xl shadow-lg border border-slate-700">
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Total Active Customers</p>
+                    <h2 className="text-5xl font-black">{uniqueCustomers.length}</h2>
                   </div>
                 </div>
               )}
 
-              {/* 🌟 Requests & Messages Tab */}
+              {/* 🌟 Requests Tab (Shows only pending ones) */}
               {activeTab === 'requests' && (
                 <div className="space-y-6">
-                  <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><span>🔔</span> Customer Orders & Messages</h3>
+                  <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><span>🔔</span> New Orders & Messages</h3>
                   <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
                     <table className="w-full text-left">
-                      <thead className="bg-slate-50 border-b"><tr className="text-[10px] font-black uppercase text-slate-400"><th className="p-6">Type & Date</th><th className="p-6">Customer Info</th><th className="p-6">Details / Message</th><th className="p-6 text-right">Action</th></tr></thead>
+                      <thead className="bg-slate-50 border-b"><tr className="text-[10px] font-black uppercase text-slate-400"><th className="p-6">Type & Date</th><th className="p-6">Customer Info</th><th className="p-6">Details / Message</th><th className="p-6 text-right">Actions</th></tr></thead>
                       <tbody>
-                        {requests.map(r => (
+                        {pendingRequests.map(r => (
                           <tr key={r.$id} className="border-b hover:bg-slate-50 transition-colors">
                             <td className="p-6">
-                              {/* 🔴 ডায়নামিক ব্যাজ কালার */}
                               <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
                                 r.request_type === 'booking' ? 'bg-blue-100 text-blue-700' : 
                                 r.request_type === 'order' ? 'bg-emerald-100 text-emerald-700' : 
@@ -201,20 +260,63 @@ function AdminDashboard() {
                               <p className="font-bold text-slate-800">{r.product_name}</p>
                               {r.total_price > 0 && <p className="font-black text-emerald-600 mt-2">Total Bill: ৳{r.total_price.toLocaleString('en-IN')}</p>}
                               
-                              {/* 🔴 এক্সট্রা ইনফো (এখানে ইমেইল ও মেসেজ দেখাবে) */}
                               {r.extra_info && r.extra_info !== 'পেশা: N/A, ব্যবসার ধরন: N/A' && (
                                 <p className="text-xs text-slate-600 mt-2 border-l-2 border-orange-300 pl-3 whitespace-pre-wrap bg-orange-50/50 p-2 rounded-r-lg">
                                   {r.extra_info}
                                 </p>
                               )}
                             </td>
-                            <td className="p-6 text-right">
-                              <button onClick={() => handleDelete(REQUEST_COLLECTION_ID, r.$id)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded-md transition-colors border border-transparent hover:border-red-200">Done / Delete</button>
+                            <td className="p-6 text-right space-x-2 whitespace-nowrap">
+                              {/* 🔴 নতুন দুইটা বাটন: Done এবং Delete */}
+                              <button onClick={() => handleMarkAsDone(r.$id, r.request_type)} className="bg-emerald-50 text-emerald-600 font-black border border-emerald-200 hover:bg-emerald-600 hover:text-white px-4 py-2 rounded-lg transition-colors text-xs shadow-sm">
+                                ✅ Mark Done
+                              </button>
+                              <button onClick={() => handleDelete(REQUEST_COLLECTION_ID, r.$id)} className="bg-white text-red-500 font-bold border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-xs">
+                                🗑️ Delete
+                              </button>
                             </td>
                           </tr>
                         ))}
-                        {requests.length === 0 && (
-                          <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No new orders or messages right now!</td></tr>
+                        {pendingRequests.length === 0 && (
+                          <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No new pending orders right now!</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 🌟 Customers Tab (Shows everyone, including done orders) */}
+              {activeTab === 'customers' && (
+                <div className="space-y-6">
+                  <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><span>👥</span> Customer Directory</h3>
+                  <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b"><tr className="text-[10px] font-black uppercase text-slate-400"><th className="p-6">Customer Name & Phone</th><th className="p-6">Delivery Address</th><th className="p-6">Total Orders & Spent</th><th className="p-6 text-right">Action</th></tr></thead>
+                      <tbody>
+                        {uniqueCustomers.map((c: any, idx) => (
+                          <tr key={idx} className="border-b hover:bg-slate-50 transition-colors">
+                            <td className="p-6">
+                              <p className="font-black text-slate-800 text-lg">{c.name}</p>
+                              <p className="font-bold text-orange-600 mt-1 flex items-center gap-1">📞 {c.phone}</p>
+                            </td>
+                            <td className="p-6">
+                              <p className="text-sm text-slate-600 font-medium max-w-xs">{c.address || 'N/A'}</p>
+                            </td>
+                            <td className="p-6">
+                              <p className="font-black text-slate-800"><span className="text-slate-400">Orders/Msgs:</span> {c.totalOrders}</p>
+                              <p className="font-black text-emerald-600 mt-1"><span className="text-slate-400">Spent:</span> ৳{c.totalSpent.toLocaleString('en-IN')}</p>
+                            </td>
+                            <td className="p-6 text-right">
+                               <p className="text-xs font-bold text-slate-400 mb-3">Last Active: {new Date(c.lastActive).toLocaleDateString('en-GB')}</p>
+                               <button onClick={() => handleDeleteCustomer(c.phone)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-2 rounded-md transition-colors border border-red-100 hover:border-red-300 text-xs">
+                                 🗑️ Delete Customer
+                               </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {uniqueCustomers.length === 0 && (
+                          <tr><td colSpan={4} className="p-10 text-center font-bold text-slate-400">No active customers found yet!</td></tr>
                         )}
                       </tbody>
                     </table>

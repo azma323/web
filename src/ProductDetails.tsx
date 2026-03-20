@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ID } from 'appwrite';
-import { databases, DATABASE_ID, PRODUCT_COLLECTION_ID, REQUEST_COLLECTION_ID, CATEGORY_COLLECTION_ID } from './appwrite';
+// 🔴 শুধু account ইমপোর্ট করা হয়েছে অটো-ফিলের জন্য
+import { databases, account, DATABASE_ID, PRODUCT_COLLECTION_ID, REQUEST_COLLECTION_ID, CATEGORY_COLLECTION_ID } from './appwrite';
 
 function ProductDetails() {
   const { id } = useParams();
@@ -12,7 +13,6 @@ function ProductDetails() {
   const [viewFullScreen, setViewFullScreen] = useState<string | null>(null);
   const [catNameStr, setCatNameStr] = useState<string>('');
 
-  // 🔴 Modal, Form & Delivery States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deliveryArea, setDeliveryArea] = useState<'inside' | 'outside'>('inside');
@@ -52,16 +52,27 @@ function ProductDetails() {
         setLoading(false);
       }
     };
+
+    // 🔴 ম্যাজিক: কাস্টমার লগইন করা থাকলে তার নাম অটো-ফিল করে দেবে!
+    const fetchLoggedInUser = async () => {
+      try {
+        const user = await account.get();
+        setFormData(prev => ({ ...prev, name: user.name }));
+      } catch (error) {
+        console.log("Customer is not logged in.");
+      }
+    };
+
     if (id) fetchProductDetails();
+    fetchLoggedInUser(); // ইউজার ফেচ কল করা হলো
   }, [id]);
 
   if (loading) return <div className="min-h-screen flex justify-center items-center bg-slate-50"><div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600"></div></div>;
   if (!product) return <div className="min-h-screen flex items-center justify-center font-bold text-3xl">প্রোডাক্টটি খুঁজে পাওয়া যায়নি!</div>;
 
-  // 🎯 ক্যাটাগরি ও ডায়নামিক ডেলিভারি লজিক
   let actionType = 'order'; 
   let buttonText = 'অর্ডার করুন';
-  let deliveryCharge = deliveryArea === 'inside' ? 60 : 120; // রেডিও বাটন অনুযায়ী চার্জ
+  let deliveryCharge = deliveryArea === 'inside' ? 60 : 120; 
 
   if (catNameStr.includes('apartment') || catNameStr.includes('এপার্টমেন্ট') || catNameStr.includes('flat') || catNameStr.includes('ফ্ল্যাট') || catNameStr.includes('real estate')) {
     actionType = 'booking';
@@ -71,7 +82,6 @@ function ProductDetails() {
     buttonText = 'কন্ট্যাক্ট করুন';
   }
 
-  // 🚀 ফর্ম সাবমিট লজিক
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -95,11 +105,13 @@ function ProductDetails() {
       
       alert(`ধন্যবাদ ${formData.name}! আপনার ${buttonText} সফলভাবে সম্পন্ন হয়েছে। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।`);
       setIsModalOpen(false);
-      setFormData({ name: '', phone: '', address: '', profession: '', businessType: '' });
+      
+      // 🔴 সাবমিট করার পর যাতে নামটা আবার অটো-ফিল থেকে যায়, তাই নামটা রেখে বাকিগুলো ক্লিয়ার করা হলো
+      setFormData(prev => ({ ...prev, phone: '', address: '', profession: '', businessType: '' }));
       setDeliveryArea('inside');
     } catch (error: any) {
       console.error(error);
-      alert(`দুঃখিত, সাবমিট করতে সমস্যা হয়েছে। ദয়া করে Appwrite চেক করুন।`);
+      alert(`দুঃখিত, সাবমিট করতে সমস্যা হয়েছে। দয়া করে Appwrite চেক করুন।`);
     } finally {
       setIsSubmitting(false);
     }
@@ -113,13 +125,9 @@ function ProductDetails() {
           <span className="mr-2">←</span> পূর্বের পেজে ফিরে যান
         </Link>
 
-        {/* 🌟 Amazon Style Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           
-          {/* 📸 Left Side: Image Gallery (Amazon Style) */}
           <div className="lg:col-span-5 flex flex-col md:flex-row gap-4 h-auto md:h-[500px]">
-            
-            {/* Vertical Thumbnails */}
             {product.images && product.images.length > 1 && (
               <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto pb-2 md:pb-0 md:pr-2 w-full md:w-20 shrink-0 hide-scrollbar order-2 md:order-1">
                 {product.images.map((imgUrl: string, index: number) => (
@@ -127,7 +135,7 @@ function ProductDetails() {
                     key={index} 
                     src={imgUrl} 
                     alt={`thumbnail-${index}`} 
-                    onMouseEnter={() => setMainImage(imgUrl)} // ম্যাজিক: হোভার করলেই ছবি চেঞ্জ
+                    onMouseEnter={() => setMainImage(imgUrl)} 
                     onClick={() => setMainImage(imgUrl)} 
                     className={`h-16 w-16 md:h-16 md:w-full object-cover rounded-md cursor-pointer transition-all border-2 flex-shrink-0 ${mainImage === imgUrl ? 'border-orange-500 shadow-sm' : 'border-slate-200 opacity-70 hover:opacity-100'}`} 
                   />
@@ -135,14 +143,12 @@ function ProductDetails() {
               </div>
             )}
 
-            {/* Main Large Image */}
             <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center p-4 order-1 md:order-2 group border border-slate-100">
               <img src={mainImage} alt={product.title} onClick={() => setViewFullScreen(mainImage)} className="max-w-full max-h-full object-contain cursor-zoom-in" />
               <div className="absolute top-4 left-4 z-20"><span className="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold uppercase shadow-sm">{catNameStr || 'Premium'}</span></div>
             </div>
           </div>
 
-          {/* 📝 Right Side: Product Info */}
           <div className="lg:col-span-7 flex flex-col h-full py-2">
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-snug mb-2">{product.title}</h1>
             
@@ -173,7 +179,6 @@ function ProductDetails() {
         </div>
       </div>
 
-      {/* 🌟 ডায়নামিক পপ-আপ ফর্ম (আপনার আগের ১০০% পারফেক্ট কোড) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -188,7 +193,6 @@ function ProductDetails() {
 
             <div className="p-8 overflow-y-auto">
               
-              {/* খরচের বিবরণ */}
               {actionType === 'order' && (
                 <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-200">
                   <h4 className="font-bold text-slate-800 mb-3 border-b pb-2">খরচের বিবরণ:</h4>
@@ -202,7 +206,6 @@ function ProductDetails() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 
-                {/* 🔴 ডেলিভারি এরিয়া অপশন (শুধু অর্ডারের ক্ষেত্রে দেখাবে) */}
                 {actionType === 'order' && (
                   <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                     <label className="block text-xs font-bold text-slate-600 uppercase mb-3">কোথায় ডেলিভারি নিতে চান? *</label>
