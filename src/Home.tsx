@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Query, OAuthProvider } from 'appwrite';
-import { databases, account, DATABASE_ID, PRODUCT_COLLECTION_ID, CATEGORY_COLLECTION_ID } from './appwrite';
+import { databases, account, DATABASE_ID, CATEGORY_COLLECTION_ID } from './appwrite';
+// 🔴 ম্যাজিক: আমাদের তৈরি করা কাস্টম হুক ইম্পোর্ট করা হলো
+import { useProducts } from './hooks/useProducts'; 
 
 function Home() {
-  const [products, setProducts] = useState<any[]>([]);
   const [allCategories, setAllCategories] = useState<any[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  
-  // 🔴 ম্যাজিক: মোবাইলের জন্য সাইডবার ওপেন/ক্লোজ করার স্টেট
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSubCategoryId = searchParams.get('category');
+
+  // 🔴 এন্টারপ্রাইজ আর্কিটেকচার: React Query-এর মাধ্যমে ০ সেকেন্ডে ডেটা লোড!
+  const { data: products = [], isLoading: loadingProducts } = useProducts(selectedSubCategoryId);
 
   const handleCustomerLogin = () => {
     try {
@@ -31,7 +31,10 @@ function Home() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID);
+        // 🔴 স্ট্রাকচারাল ফিক্স: Pagination Limit ১০০ করে দেওয়া হয়েছে
+        const res = await databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID, [
+          Query.limit(100) 
+        ]);
         setAllCategories(res.documents);
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -39,22 +42,6 @@ function Home() {
     };
     fetchCategories();
   }, []);
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setLoadingProducts(true);
-      try {
-        const queries = selectedSubCategoryId ? [Query.equal('categories', selectedSubCategoryId)] : [];
-        const prodRes = await databases.listDocuments(DATABASE_ID, PRODUCT_COLLECTION_ID, queries);
-        setProducts(prodRes.documents.reverse());
-      } catch (error) {
-        console.error("Products fetch error:", error);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-    fetchProducts();
-  }, [selectedSubCategoryId]);
 
   const mainCategories = allCategories.filter(c => !c.parent_id || c.parent_id === '');
 
@@ -66,41 +53,29 @@ function Home() {
     }
   };
 
-  // 🔴 ক্যাটাগরিতে ক্লিক করার পর মোবাইলের সাইডবার নিজে থেকে বন্ধ হওয়ার ফাংশন
   const handleCategorySelect = (categoryId: string | null) => {
     if (categoryId) {
       setSearchParams({ category: categoryId });
     } else {
       setSearchParams({});
     }
-    setIsSidebarOpen(false); // ক্লিক করলেই মোবাইল মেনু বন্ধ হয়ে যাবে
+    setIsSidebarOpen(false); 
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-      
-      {/* 🌟 Header */}
       <header className="bg-slate-900 text-white py-4 px-4 md:px-8 flex items-center justify-between sticky top-0 z-50 shadow-md">
          <div className="flex items-center gap-3">
-           {/* 🔴 মোবাইলের জন্য মেনু বাটন (☰) */}
-           <button 
-             onClick={() => setIsSidebarOpen(true)} 
-             className="md:hidden text-white text-2xl hover:text-orange-400 transition-colors"
-           >
+           <button onClick={() => setIsSidebarOpen(true)} className="md:hidden text-white text-2xl hover:text-orange-400 transition-colors">
              ☰
            </button>
-           
            <Link to="/" onClick={() => handleCategorySelect(null)} className="text-2xl md:text-3xl font-black text-orange-400 tracking-tighter">
               BDT<span className="text-white hidden md:inline">.com</span>
            </Link>
          </div>
          
          <div className="hidden md:flex flex-1 max-w-3xl mx-8">
-            <input 
-              type="text" 
-              placeholder="Search products..." 
-              className="w-full px-4 py-2.5 rounded-l-md outline-none text-slate-900" 
-            />
+            <input type="text" placeholder="Search products..." className="w-full px-4 py-2.5 rounded-l-md outline-none text-slate-900" />
             <button className="bg-orange-400 hover:bg-orange-500 transition-colors px-6 py-2.5 rounded-r-md font-bold text-slate-900">
               🔍
             </button>
@@ -110,42 +85,29 @@ function Home() {
            <Link to="/contact" className="font-bold text-slate-300 hover:text-white transition-colors flex items-center gap-2">
              <span className="text-xl">📞</span> <span className="hidden md:inline">Contact</span>
            </Link>
-
            <button onClick={handleCustomerLogin} className="font-bold text-slate-300 hover:text-white transition-colors flex items-center gap-2 border-l border-slate-700 pl-3 md:pl-6">
              <span className="text-xl">🛍️</span> <span className="hidden md:inline">Login</span>
            </button>
-
            <Link to="/login" className="font-bold text-slate-300 hover:text-white transition-colors flex items-center gap-2 border-l border-slate-700 pl-3 md:pl-6">
              <span className="text-xl">⚙️</span> <span className="hidden md:inline">Admin</span>
            </Link>
          </div>
       </header>
 
-      {/* 🌟 Main Content Area */}
       <main className="flex flex-1 w-full max-w-[1500px] mx-auto relative">
-        
-        {/* 🔴 মোবাইলে সাইডবার ওপেন থাকলে পেছনের কালো শ্যাডো (Overlay) */}
         {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-slate-900/60 z-[60] md:hidden backdrop-blur-sm transition-opacity"
-            onClick={() => setIsSidebarOpen(false)}
-          ></div>
+          <div className="fixed inset-0 bg-slate-900/60 z-[60] md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
         )}
 
-        {/* 🌟 Sidebar (মোবাইল এবং পিসি উভয়ের জন্য ডায়নামিক) */}
         <aside className={`fixed md:sticky top-0 md:top-[72px] left-0 h-full md:h-[calc(100vh-72px)] w-64 bg-white border-r border-slate-200 overflow-y-auto z-[70] transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'} shrink-0`}>
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Department</h3>
-            {/* 🔴 মোবাইলের জন্য ক্লোজ বাটন (✕) */}
             <button className="md:hidden text-slate-400 hover:text-red-500 font-bold text-xl" onClick={() => setIsSidebarOpen(false)}>✕</button>
           </div>
           
           <ul className="py-2">
             <li className="px-4 py-1.5">
-              <button 
-                onClick={() => handleCategorySelect(null)} 
-                className={`w-full text-left text-sm font-medium hover:text-orange-600 transition-colors ${!selectedSubCategoryId ? 'text-orange-600 font-bold' : 'text-slate-700'}`}
-              >
+              <button onClick={() => handleCategorySelect(null)} className={`w-full text-left text-sm font-medium hover:text-orange-600 transition-colors ${!selectedSubCategoryId ? 'text-orange-600 font-bold' : 'text-slate-700'}`}>
                 All Products
               </button>
             </li>
@@ -163,10 +125,7 @@ function Home() {
                     <ul className="bg-slate-50 py-2 border-l-2 border-orange-200 ml-4 pl-2 mr-4 rounded-br-lg mb-2">
                       {subCats.map((subCat) => (
                         <li key={subCat.$id}>
-                          <button 
-                            onClick={() => handleCategorySelect(subCat.$id)} 
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors rounded-md ${selectedSubCategoryId === subCat.$id ? 'text-orange-600 font-bold bg-orange-50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
-                          >
+                          <button onClick={() => handleCategorySelect(subCat.$id)} className={`w-full text-left px-3 py-2 text-sm transition-colors rounded-md ${selectedSubCategoryId === subCat.$id ? 'text-orange-600 font-bold bg-orange-50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}>
                             {subCat.name}
                           </button>
                         </li>
@@ -179,7 +138,6 @@ function Home() {
           </ul>
         </aside>
 
-        {/* 🌟 Product Grid Section */}
         <section className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-slate-100 min-h-[calc(100vh-72px)]">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-slate-200 gap-3">
              <h2 className="text-xl md:text-2xl font-black text-slate-800">

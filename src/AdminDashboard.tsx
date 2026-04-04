@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ID } from 'appwrite';
+// 🔴 Appwrite থেকে ID, Query এবং ImageFormat সঠিকভাবে ইম্পোর্ট করা হয়েছে
+import { ID, Query, ImageFormat } from 'appwrite';
 import { databases, account, storage, DATABASE_ID, PRODUCT_COLLECTION_ID, CATEGORY_COLLECTION_ID, REQUEST_COLLECTION_ID, BUCKET_ID } from './appwrite';
 
 interface Product {
@@ -60,27 +61,31 @@ function AdminDashboard() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewImage, setViewImage] = useState<string | null>(null);
+  
+  // Product Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
-
+  
+  // Category Form State
   const [catName, setCatName] = useState('');
   const [catParentId, setCatParentId] = useState(''); 
+  const [editingCatId, setEditingCatId] = useState<string | null>(null); // 🔴 নতুন: ক্যাটাগরি এডিট স্টেট
   
+  // Product Form State
   const [pTitle, setPTitle] = useState('');
   const [pPrice, setPPrice] = useState('');
   const [pDesc, setPDesc] = useState('');
   const [pYoutube, setPYoutube] = useState('');
   const [pCatId, setPCatId] = useState('');
-  
-  // 🔴 ম্যাজিক: এখন এটি আর FileList নেই, এটি একটি Array হয়ে গেছে যাতে ছবি জমিয়ে রাখা যায়
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const fetchData = async () => {
     try {
+      // 🔴 লিমিট ফিক্স: Query.limit ব্যবহার করা হয়েছে যাতে ২৫টার পর ডেটা হারানো না যায়
       const [catRes, prodRes, reqRes] = await Promise.all([
-        databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID),
-        databases.listDocuments(DATABASE_ID, PRODUCT_COLLECTION_ID),
-        databases.listDocuments(DATABASE_ID, REQUEST_COLLECTION_ID)
+        databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID, [Query.limit(100)]),
+        databases.listDocuments(DATABASE_ID, PRODUCT_COLLECTION_ID, [Query.limit(500)]),
+        databases.listDocuments(DATABASE_ID, REQUEST_COLLECTION_ID, [Query.limit(500)])
       ]);
       setCategories(catRes.documents);
       setProducts(prodRes.documents as unknown as Product[]);
@@ -102,15 +107,41 @@ function AdminDashboard() {
     window.location.replace('/'); 
   };
 
-  const handleAddCategory = async (e: React.FormEvent) => {
+  // 🔴 ম্যাজিক: ক্যাটাগরি ক্রিয়েট এবং আপডেট লজিক একসাথে
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catName) return alert("Category name required!");
     try {
-      await databases.createDocument(DATABASE_ID, CATEGORY_COLLECTION_ID, ID.unique(), { 
-        name: catName, slug: catName.toLowerCase().replace(/\s+/g, '-'), parent_id: catParentId 
-      });
-      setCatName(''); setCatParentId(''); fetchData();
+      const categoryData = { 
+        name: catName, 
+        slug: catName.toLowerCase().replace(/\s+/g, '-'), 
+        parent_id: catParentId 
+      };
+
+      if (editingCatId) {
+        await databases.updateDocument(DATABASE_ID, CATEGORY_COLLECTION_ID, editingCatId, categoryData);
+        alert("Category Updated Successfully! 🎉");
+      } else {
+        await databases.createDocument(DATABASE_ID, CATEGORY_COLLECTION_ID, ID.unique(), categoryData);
+        alert("Category Created Successfully! 🎉");
+      }
+      
+      cancelCatEdit(); 
+      fetchData();
     } catch (error: any) { alert(`Error: ${error.message}`); }
+  };
+
+  const handleEditCategoryClick = (category: any) => {
+    setEditingCatId(category.$id);
+    setCatName(category.name);
+    setCatParentId(category.parent_id || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const cancelCatEdit = () => {
+    setEditingCatId(null);
+    setCatName('');
+    setCatParentId('');
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -124,7 +155,24 @@ function AdminDashboard() {
           const originalFile = imageFiles[i];
           const processedFile = await cropAndCompressImage(originalFile); 
           const uploadedFile = await storage.createFile(BUCKET_ID, ID.unique(), processedFile);
-          const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
+          
+          // 🔴 ম্যাজিক: WebP ফরম্যাটে দ্রুত লোড হওয়ার কনফিগারেশন
+          const fileUrl = storage.getFilePreview(
+            BUCKET_ID, 
+            uploadedFile.$id, 
+            800, 
+            800, 
+            undefined, 
+            80, 
+            undefined, 
+            undefined, 
+            undefined, 
+            undefined, 
+            undefined, 
+            undefined, 
+            ImageFormat.Webp 
+          ).toString();
+          
           uploadedImageUrls.push(fileUrl);
         }
       }
@@ -250,7 +298,6 @@ function AdminDashboard() {
             <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div></div>
           ) : (
             <>
-              {/* ... (Dashboard, Requests, Customers, Categories Tabs remain identical) ... */}
               {activeTab === 'dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="bg-white p-8 rounded-3xl border border-slate-200">
@@ -341,45 +388,55 @@ function AdminDashboard() {
 
               {activeTab === 'categories' && ( 
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                 <div className="bg-white p-8 rounded-3xl border border-slate-200 h-fit">
-                   <h3 className="font-black text-lg mb-6">Create Category</h3>
-                   <form onSubmit={handleAddCategory} className="space-y-4">
+                 <div className={`p-8 rounded-3xl border transition-all h-fit ${editingCatId ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'}`}>
+                   <div className="flex justify-between items-center mb-6">
+                     <h3 className="font-black text-lg">{editingCatId ? '✏️ Update Category' : 'Create Category'}</h3>
+                     {editingCatId && <button type="button" onClick={cancelCatEdit} className="text-xs font-bold text-slate-500 hover:text-red-500">Cancel</button>}
+                   </div>
+                   
+                   <form onSubmit={handleSaveCategory} className="space-y-4">
                      <div>
                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Category Name</label>
-                       <input type="text" value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. Electronics or Mobile" className="w-full px-5 py-3 rounded-xl border-2 border-slate-100 focus:border-orange-500 outline-none" required/>
+                       <input type="text" value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. Electronics or Mobile" className="w-full px-5 py-3 rounded-xl border-2 border-slate-100 focus:border-orange-500 outline-none bg-white" required/>
                      </div>
                      <div>
                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Parent Category (Optional)</label>
                        <select value={catParentId} onChange={(e) => setCatParentId(e.target.value)} className="w-full px-5 py-3 rounded-xl border-2 border-slate-100 outline-none bg-white focus:border-orange-500">
                          <option value="">None (Make it a Main Category)</option>
-                         {categories.filter(c => !c.parent_id).map(cat => (
+                         {categories.filter(c => !c.parent_id && c.$id !== editingCatId).map(cat => (
                            <option key={cat.$id} value={cat.$id}>{cat.name}</option>
                          ))}
                        </select>
                      </div>
-                     <button className="w-full bg-slate-900 hover:bg-orange-500 transition-colors text-white py-4 rounded-xl font-black mt-2">SAVE CATEGORY</button>
+                     <button type="submit" className={`w-full transition-colors text-white py-4 rounded-xl font-black mt-2 ${editingCatId ? 'bg-orange-500 hover:bg-orange-600' : 'bg-slate-900 hover:bg-orange-500'}`}>
+                        {editingCatId ? 'UPDATE CATEGORY' : 'SAVE CATEGORY'}
+                     </button>
                    </form>
                  </div>
-                 <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 overflow-hidden">
+                 
+                 <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
                    <table className="w-full text-left">
                      <thead className="bg-slate-50 border-b"><tr className="text-[10px] font-black uppercase text-slate-400"><th className="p-6">Category Name</th><th className="p-6 text-right">Action</th></tr></thead>
                      <tbody>
                        {categories.map(c => (
-                         <tr key={c.$id} className="border-b">
+                         <tr key={c.$id} className={`border-b transition-colors ${editingCatId === c.$id ? 'bg-orange-50/50' : 'hover:bg-slate-50'}`}>
                            <td className="p-6 font-bold flex items-center gap-2">
                              {c.name}
                              {c.parent_id && <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-widest border border-orange-100">Sub of: {categories.find(p => p.$id === c.parent_id)?.name || 'Unknown'}</span>}
                            </td>
-                           <td className="p-6 text-right"><button onClick={() => handleDelete(CATEGORY_COLLECTION_ID, c.$id)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-1 rounded-md">Delete</button></td>
+                           <td className="p-6 text-right space-x-2 whitespace-nowrap">
+                             <button onClick={() => handleEditCategoryClick(c)} className="text-blue-600 font-bold hover:bg-blue-50 px-3 py-1 rounded-md transition-colors text-sm">Edit</button>
+                             <button onClick={() => handleDelete(CATEGORY_COLLECTION_ID, c.$id)} className="text-red-500 font-bold hover:bg-red-50 px-3 py-1 rounded-md transition-colors text-sm">Delete</button>
+                           </td>
                          </tr>
                        ))}
+                       {categories.length === 0 && <tr><td colSpan={2} className="p-10 text-center font-bold text-slate-400">No categories found!</td></tr>}
                      </tbody>
                    </table>
                  </div>
                </div>
               )}
 
-              {/* Products Tab */}
               {activeTab === 'products' && (
                 <div className="space-y-10">
                   <div className={`p-10 rounded-3xl border shadow-sm transition-all ${editingId ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'}`}>
@@ -399,7 +456,6 @@ function AdminDashboard() {
                       
                       <input type="text" value={pYoutube} onChange={(e) => setPYoutube(e.target.value)} placeholder="YouTube Video URL (Optional)" className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white" />
                       
-                      {/* 🔴 আপডেট হওয়া ছবি সিলেক্ট এবং লাইভ প্রিভিউ সেকশন */}
                       <div className="md:col-span-2">
                         <label className="block text-xs font-black uppercase text-slate-400 mb-2 ml-1">
                           Upload Images (Select one by one or multiple) {editingId && <span className="text-orange-500 lowercase normal-case">- leave empty to keep existing</span>}
@@ -412,14 +468,13 @@ function AdminDashboard() {
                           onChange={(e) => {
                             if (e.target.files) {
                               const newFiles = Array.from(e.target.files);
-                              setImageFiles(prev => [...prev, ...newFiles]); // লিস্টে নতুনগুলো যোগ হবে
-                              e.target.value = ''; // ইনপুট ক্লিয়ার, যাতে একই ছবি চাইলে আবার সিলেক্ট করা যায়
+                              setImageFiles(prev => [...prev, ...newFiles]);
+                              e.target.value = ''; 
                             }
                           }} 
                           className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100" 
                         />
 
-                        {/* 🖼️ ছবির লাইভ প্রিভিউ এবং ডিলিট করার অপশন */}
                         {imageFiles.length > 0 && (
                           <div className="flex gap-4 flex-wrap mt-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
                             {imageFiles.map((file, idx) => (

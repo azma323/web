@@ -9,35 +9,29 @@ import Contact from './Contact';
 
 function App() {
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
-    // চেক করা হচ্ছে ইউজার লগইন করা কি না
     account.get()
-      .then(res => {
-        setUser(res); // ইউজার পাওয়া গেলে স্টেট আপডেট হবে
-      })
-      .catch(() => {
-        setUser(null); // লগইন করা না থাকলে নাল হবে
-      })
-      .finally(() => setLoading(false));
+      .then(res => setUser(res))
+      .catch(() => setUser(null))
+      .finally(() => setLoadingAuth(false));
   }, []);
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-bold">BDT Syncing...</div>;
+  // 🔴 ম্যাজিক: এখান থেকে if (loading) return <div>...</div> লাইনটি পুরোপুরি মুছে দেওয়া হলো। 
+  // এখন সাইট সাথে সাথে ওপেন হবে!
 
   return (
     <BrowserRouter>
       <Routes>
+        {/* পাবলিক পেজগুলো কোনো লোডিং ছাড়াই সাথে সাথে রেন্ডার হবে */}
         <Route path="/" element={<Home />} />
-        <Route path="/login" element={user ? <Navigate to="/admin" /> : <Login />} />
-        
-        {/* যদি ইউজার থাকে তবেই ড্যাশবোর্ড দেখাবে */}
-        <Route 
-          path="/admin" 
-          element={user ? <AdminDashboard /> : <Navigate to="/login" />} 
-        />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/contact" element={<Contact />} />
+        
+        {/* শুধু লগইন আর অ্যাডমিনের জন্য অথেন্টিকেশন চেক করা হবে */}
+        <Route path="/login" element={loadingAuth ? <div>Loading...</div> : (user ? <Navigate to="/admin" /> : <Login />)} />
+        <Route path="/admin" element={loadingAuth ? <div>Authenticating...</div> : (user ? <AdminDashboard /> : <Navigate to="/login" />)} />
       </Routes>
     </BrowserRouter>
   );

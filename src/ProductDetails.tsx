@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ID } from 'appwrite';
-// 🔴 শুধু account ইমপোর্ট করা হয়েছে অটো-ফিলের জন্য
-import { databases, account, DATABASE_ID, PRODUCT_COLLECTION_ID, REQUEST_COLLECTION_ID, CATEGORY_COLLECTION_ID } from './appwrite';
+import { databases, account, DATABASE_ID, REQUEST_COLLECTION_ID, CATEGORY_COLLECTION_ID } from './appwrite';
+// 🔴 ম্যাজিক: আমাদের কাস্টম হুক ইম্পোর্ট
+import { useProductDetails } from './hooks/useProducts';
 
 function ProductDetails() {
   const { id } = useParams();
-  const [product, setProduct] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // 🔴 React Query থেকে ডাটা আসছে
+  const { data: product, isLoading: loading } = useProductDetails(id as string);
   
   const [mainImage, setMainImage] = useState<string>('');
   const [viewFullScreen, setViewFullScreen] = useState<string | null>(null);
@@ -20,20 +22,18 @@ function ProductDetails() {
     name: '', phone: '', address: '', profession: '', businessType: ''
   });
 
+  // 🔴 ডাটা লোড হওয়ার পর ইমেজ ও ক্যাটাগরি সেট করার লজিক
   useEffect(() => {
-    const fetchProductDetails = async () => {
-      try {
-        const response = await databases.getDocument(DATABASE_ID, PRODUCT_COLLECTION_ID, id as string);
-        setProduct(response);
-        
-        if (response.images && response.images.length > 0) {
-          setMainImage(response.images[0]);
-        } else {
-          setMainImage(response.thumbnail || '');
-        }
+    if (product) {
+      if (product.images && product.images.length > 0) {
+        setMainImage(product.images[0]);
+      } else {
+        setMainImage(product.thumbnail || '');
+      }
 
+      const fetchCatName = async () => {
         let fetchedCatName = '';
-        const catData = response.categories;
+        const catData = product.categories;
         if (typeof catData === 'string') {
            try {
               const catDoc = await databases.getDocument(DATABASE_ID, CATEGORY_COLLECTION_ID, catData);
@@ -45,15 +45,13 @@ function ProductDetails() {
            fetchedCatName = catData.name;
         }
         setCatNameStr(fetchedCatName.toLowerCase());
+      };
+      
+      fetchCatName();
+    }
+  }, [product]); // product ডাটা পরিবর্তন হলে এটি রান করবে
 
-      } catch (error) {
-        console.error("ডাটা আনতে সমস্যা হয়েছে:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // 🔴 ম্যাজিক: কাস্টমার লগইন করা থাকলে তার নাম অটো-ফিল করে দেবে!
+  useEffect(() => {
     const fetchLoggedInUser = async () => {
       try {
         const user = await account.get();
@@ -62,10 +60,8 @@ function ProductDetails() {
         console.log("Customer is not logged in.");
       }
     };
-
-    if (id) fetchProductDetails();
-    fetchLoggedInUser(); // ইউজার ফেচ কল করা হলো
-  }, [id]);
+    fetchLoggedInUser(); 
+  }, []);
 
   if (loading) return <div className="min-h-screen flex justify-center items-center bg-slate-50"><div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600"></div></div>;
   if (!product) return <div className="min-h-screen flex items-center justify-center font-bold text-3xl">প্রোডাক্টটি খুঁজে পাওয়া যায়নি!</div>;
@@ -106,7 +102,6 @@ function ProductDetails() {
       alert(`ধন্যবাদ ${formData.name}! আপনার ${buttonText} সফলভাবে সম্পন্ন হয়েছে। আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।`);
       setIsModalOpen(false);
       
-      // 🔴 সাবমিট করার পর যাতে নামটা আবার অটো-ফিল থেকে যায়, তাই নামটা রেখে বাকিগুলো ক্লিয়ার করা হলো
       setFormData(prev => ({ ...prev, phone: '', address: '', profession: '', businessType: '' }));
       setDeliveryArea('inside');
     } catch (error: any) {
