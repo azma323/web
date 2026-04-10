@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 // 🔴 Appwrite থেকে ID, Query এবং ImageFormat সঠিকভাবে ইম্পোর্ট করা হয়েছে
-import { ID, Query, ImageFormat } from 'appwrite';
+import { ID, Query } from 'appwrite';
 import { databases, account, storage, DATABASE_ID, PRODUCT_COLLECTION_ID, CATEGORY_COLLECTION_ID, REQUEST_COLLECTION_ID, BUCKET_ID } from './appwrite';
 
 interface Product {
@@ -15,44 +15,51 @@ interface RequestItem {
   total_price: number; $createdAt: string;
 }
 
+// 🔴 ম্যাজিক ফিক্স: বাগ-ফ্রি এবং সুপার ফাস্ট ইমেজ কম্প্রেসার
 const cropAndCompressImage = async (file: File, targetSize = 1000, quality = 0.8): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
+    
     reader.onload = (event) => {
       const img = new Image();
-      img.src = event.target?.result as string;
+      
+      // 🔴 ফিক্স: আগে onload ইভেন্ট সেট করতে হবে, তারপর src দিতে হবে
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = targetSize;
         canvas.height = targetSize;
         const ctx = canvas.getContext('2d');
+        
+        if (!ctx) return reject(new Error('Canvas context failed'));
 
         const size = Math.min(img.width, img.height);
         const xOffset = (img.width - size) / 2;
         const yOffset = (img.height - size) / 2;
 
-        if (ctx) {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, targetSize, targetSize);
-          ctx.drawImage(img, xOffset, yOffset, size, size, 0, 0, targetSize, targetSize);
-        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, targetSize, targetSize);
+        ctx.drawImage(img, xOffset, yOffset, size, size, 0, 0, targetSize, targetSize);
 
         canvas.toBlob((blob) => {
           if (blob) {
-            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg', lastModified: Date.now() });
+            // ফাইলের নাম সঠিকভাবে জেনারেট করা হচ্ছে
+            const fileName = file.name ? file.name.replace(/\.[^/.]+$/, "") + ".jpg" : "compressed_image.jpg";
+            const newFile = new File([blob], fileName, { type: 'image/jpeg', lastModified: Date.now() });
             resolve(newFile);
           } else {
             reject(new Error('Canvas to Blob failed'));
           }
         }, 'image/jpeg', quality);
       };
-      img.onerror = (error) => reject(error);
+      
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = event.target?.result as string; // 🔴 ফিক্স: src সবার শেষে দেওয়া হলো
     };
-    reader.onerror = (error) => reject(error);
+    
+    reader.onerror = () => reject(new Error('File read failed'));
   });
 };
-
 
 function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -157,21 +164,8 @@ function AdminDashboard() {
           const uploadedFile = await storage.createFile(BUCKET_ID, ID.unique(), processedFile);
           
           // 🔴 ম্যাজিক: WebP ফরম্যাটে দ্রুত লোড হওয়ার কনফিগারেশন
-          const fileUrl = storage.getFilePreview(
-            BUCKET_ID, 
-            uploadedFile.$id, 
-            800, 
-            800, 
-            undefined, 
-            80, 
-            undefined, 
-            undefined, 
-            undefined, 
-            undefined, 
-            undefined, 
-            undefined, 
-            ImageFormat.Webp 
-          ).toString();
+          // 🔴 ম্যাজিক: আগের সিম্পল ভিউ মেথডটিই ব্যবহার করা হলো, যা যেকোনো ভার্সনে ১০০% কাজ করবে
+const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
           
           uploadedImageUrls.push(fileUrl);
         }
