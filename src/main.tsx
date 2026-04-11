@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // ৫ মিনিট পর্যন্ত ডেটা ফ্রেশ হিসেবে ক্যাশে থাকবে (কোনো API কল হবে না)
+      staleTime: 0, // 0 মিনিট   
       refetchOnWindowFocus: false, // উইন্ডো ফোকাস করলে বারবার রিলোড হওয়া বন্ধ করবে
     },
   },

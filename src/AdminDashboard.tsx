@@ -444,9 +444,16 @@ const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
                       <input type="number" value={pPrice} onChange={(e) => setPPrice(e.target.value)} placeholder="Price (৳)" className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white" required/>
                       
                       <select value={pCatId} onChange={(e) => setPCatId(e.target.value)} className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none bg-white focus:border-orange-500" required>
-                        <option value="">Select Category</option>
-                        {categories.map(cat => <option key={cat.$id} value={cat.$id}>{cat.name}</option>)}
-                      </select>
+  <option value="">Select Category</option>
+  {categories.filter(c => !c.parent_id).map(mainCat => (
+    <optgroup key={mainCat.$id} label={mainCat.name}>
+      <option value={mainCat.$id}>{mainCat.name} (Main Category)</option>
+      {categories.filter(sub => sub.parent_id === mainCat.$id).map(subCat => (
+        <option key={subCat.$id} value={subCat.$id}>↳ {subCat.name}</option>
+      ))}
+    </optgroup>
+  ))}
+</select>
                       
                       <input type="text" value={pYoutube} onChange={(e) => setPYoutube(e.target.value)} placeholder="YouTube Video URL (Optional)" className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white" />
                       
