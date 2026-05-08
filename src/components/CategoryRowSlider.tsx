@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 interface CategoryRowSliderProps {
@@ -9,18 +9,30 @@ interface CategoryRowSliderProps {
 
 export default function CategoryRowSlider({ categoryName, products, rowIndex }: CategoryRowSliderProps) {
   const [animState, setAnimState] = useState<'idle' | 'sliding-out' | 'hidden-left'>('idle');
+  const [isPaused, setIsPaused] = useState(false);
+  
+  // useRef ব্যবহার করে লেটেস্ট pause স্টেট ট্র্যাক করা হচ্ছে যাতে ইন্টারভালের ভেতর সঠিক ভ্যালু পাওয়া যায়
+  const isPausedRef = useRef(isPaused);
 
   useEffect(() => {
-    // 🔴 সিরিয়াল অনুযায়ী অ্যানিমেশন: 
-    // প্রথম সারি ০ সেকেন্ড, দ্বিতীয় সারি ৫ সেকেন্ড, তৃতীয় সারি ১০ সেকেন্ড পর অ্যানিমেট হবে
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  useEffect(() => {
+    // সিরিয়াল অনুযায়ী অ্যানিমেশন শুরু করার জন্য ডিলে (rowIndex অনুযায়ী)
     const delay = rowIndex * 5000; 
     
     const timer = setTimeout(() => {
-      triggerAnimation();
-
-      // এরপর প্রতি ১৫ সেকেন্ড পর পর এটি লুপ হতে থাকবে
-      const interval = setInterval(() => {
+      // যদি পজ করা না থাকে তবেই প্রথমবার অ্যানিমেশন ট্রিগার হবে
+      if (!isPausedRef.current) {
         triggerAnimation();
+      }
+
+      const interval = setInterval(() => {
+        // প্রতি ১৫ সেকেন্ড পর পর চেক করবে ইউজার মাউস রেখে দিয়েছেন কি না
+        if (!isPausedRef.current) {
+          triggerAnimation();
+        }
       }, 15000);
 
       return () => clearInterval(interval);
@@ -30,11 +42,11 @@ export default function CategoryRowSlider({ categoryName, products, rowIndex }: 
   }, [rowIndex]);
 
   const triggerAnimation = () => {
-    setAnimState('sliding-out'); // ডানে স্লাইড হয়ে বের হবে
+    setAnimState('sliding-out'); 
     setTimeout(() => {
-      setAnimState('hidden-left'); // বামে লুকিয়ে যাবে
+      setAnimState('hidden-left'); 
       setTimeout(() => {
-        setAnimState('idle'); // বাম থেকে আবার আগের জায়গায় ঢুকবে
+        setAnimState('idle'); 
       }, 50);
     }, 1000);
   };
@@ -49,10 +61,20 @@ export default function CategoryRowSlider({ categoryName, products, rowIndex }: 
   if (!products || products.length === 0) return null;
 
   return (
-    <div className="mb-10 overflow-hidden">
+    <div 
+      className="mb-10 overflow-hidden"
+      // 🔴 ম্যাজিক: মাউস রাখলে অ্যানিমেশন পজ হবে, সরিয়ে নিলে আবার চালু হবে
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
       <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
         <span className="w-2 h-6 bg-orange-500 rounded-full inline-block"></span>
         {categoryName}
+        {isPaused && (
+          <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest animate-pulse ml-2">
+            (Paused)
+          </span>
+        )}
       </h2>
       
       <div className="relative overflow-hidden w-full py-2">
@@ -61,7 +83,6 @@ export default function CategoryRowSlider({ categoryName, products, rowIndex }: 
             <Link 
               to={`/product/${product.$id}`} 
               key={product.$id} 
-              // 🔴 ম্যাজিক ফিক্স: এখানে ফিক্সড Width দেওয়া হয়েছে, ফলে আর জুম হবে না। আগের গ্রিডের মতো সাইজ থাকবে।
               className="w-[160px] sm:w-[200px] md:w-[220px] lg:w-[240px] xl:w-[260px] shrink-0 bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full"
             >
               <div className="aspect-square bg-white relative p-2 md:p-4 flex items-center justify-center border-b border-slate-100">
