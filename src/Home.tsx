@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Query, OAuthProvider } from 'appwrite';
 import { databases, account, DATABASE_ID, CATEGORY_COLLECTION_ID } from './appwrite';
-// 🔴 ম্যাজিক: আমাদের তৈরি করা কাস্টম হুক ইম্পোর্ট করা হলো
+// 🔴 এন্টারপ্রাইজ আর্কিটেকচার: কাস্টম হুক এবং স্লাইডার কম্পোনেন্ট ইম্পোর্ট
 import { useProducts } from './hooks/useProducts'; 
+import CategoryRowSlider from './components/CategoryRowSlider';
 
 function Home() {
   const [allCategories, setAllCategories] = useState<any[]>([]);
@@ -13,7 +14,7 @@ function Home() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSubCategoryId = searchParams.get('category');
 
-  // 🔴 এন্টারপ্রাইজ আর্কিটেকচার: React Query-এর মাধ্যমে ০ সেকেন্ডে ডেটা লোড!
+  // 🔴 React Query-এর মাধ্যমে ডাটা লোড
   const { data: products = [], isLoading: loadingProducts } = useProducts(selectedSubCategoryId);
 
   const handleCustomerLogin = () => {
@@ -31,7 +32,7 @@ function Home() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // 🔴 স্ট্রাকচারাল ফিক্স: Pagination Limit ১০০ করে দেওয়া হয়েছে
+        // ডাটাবেস থেকে ক্যাটাগরি লিস্ট নিয়ে আসা
         const res = await databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID, [
           Query.limit(100) 
         ]);
@@ -64,6 +65,7 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+      {/* 🌟 হেডার সেকশন */}
       <header className="bg-slate-900 text-white py-4 px-4 md:px-8 flex items-center justify-between sticky top-0 z-50 shadow-md">
          <div className="flex items-center gap-3">
            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden text-white text-2xl hover:text-orange-400 transition-colors">
@@ -95,10 +97,12 @@ function Home() {
       </header>
 
       <main className="flex flex-1 w-full max-w-[1500px] mx-auto relative">
+        {/* মোবাইল সাইডবার ওভারলে */}
         {isSidebarOpen && (
           <div className="fixed inset-0 bg-slate-900/60 z-[60] md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)}></div>
         )}
 
+        {/* 👈 সাইডবার: ক্যাটাগরি লিস্ট */}
         <aside className={`fixed md:sticky top-0 md:top-[72px] left-0 h-full md:h-[calc(100vh-72px)] w-64 bg-white border-r border-slate-200 overflow-y-auto z-[70] transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'} shrink-0`}>
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Department</h3>
@@ -138,10 +142,11 @@ function Home() {
           </ul>
         </aside>
 
+        {/* 👉 মেইন কন্টেন্ট এরিয়া */}
         <section className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-slate-100 min-h-[calc(100vh-72px)]">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-slate-200 gap-3">
              <h2 className="text-xl md:text-2xl font-black text-slate-800">
-               {selectedSubCategoryId ? allCategories.find(c => c.$id === selectedSubCategoryId)?.name || 'Search Results' : 'All Recommended Products'}
+               {selectedSubCategoryId ? allCategories.find(c => c.$id === selectedSubCategoryId)?.name || 'Search Results' : 'Recommended Products'}
              </h2>
              {selectedSubCategoryId && (
                <button onClick={() => handleCategorySelect(null)} className="w-fit text-sm font-bold text-red-500 hover:text-red-700 bg-red-50 px-4 py-2 rounded-full transition-colors self-start md:self-auto">
@@ -153,26 +158,60 @@ function Home() {
           {loadingProducts ? (
             <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-4 border-orange-500"></div></div>
           ) : products.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-6">
-              {products.map(product => (
-                <Link to={`/product/${product.$id}`} key={product.$id} className="bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full">
-                  <div className="aspect-square bg-white relative p-2 md:p-4 flex items-center justify-center border-b border-slate-100">
-                    <img src={product.thumbnail || (product.images && product.images[0])} alt={product.title} className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500" />
-                  </div>
-                  <div className="p-3 md:p-4 flex flex-col flex-1">
-                    <h3 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-2 leading-snug group-hover:text-orange-600 transition-colors mb-2">{product.title}</h3>
-                    <div className="mt-auto">
-                      <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-xs font-bold text-slate-500">৳</span>
-                        <p className="font-black text-orange-600 text-lg md:text-xl">{product.price.toLocaleString('en-IN')}</p>
+            <div>
+              {selectedSubCategoryId ? (
+                // ১. নির্দিষ্ট সাব-ক্যাটাগরি সিলেক্ট করা থাকলে সাধারণ গ্রিড ভিউ দেখাবে
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-6">
+                  {products.map(product => (
+                    <Link to={`/product/${product.$id}`} key={product.$id} className="bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full">
+                      <div className="aspect-square bg-white relative p-2 md:p-4 flex items-center justify-center border-b border-slate-100">
+                        <img 
+                          src={product.thumbnail || (product.images && product.images[0]) || 'https://placehold.co/400x400/f8fafc/f97316?text=No+Image'} 
+                          alt={product.title} 
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x400/f8fafc/f97316?text=No+Image'; }}
+                          className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500" 
+                        />
                       </div>
-                      <button className="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold py-2 rounded-full text-[10px] md:text-xs transition-colors shadow-sm uppercase tracking-wider">
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                      <div className="p-3 md:p-4 flex flex-col flex-1">
+                        <h3 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-2 leading-snug group-hover:text-orange-600 transition-colors mb-2">{product.title}</h3>
+                        <div className="mt-auto">
+                          <div className="flex items-baseline gap-1 mb-2">
+                            <span className="text-xs font-bold text-slate-500">৳</span>
+                            <p className="font-black text-orange-600 text-lg md:text-xl">{product.price.toLocaleString('en-IN')}</p>
+                          </div>
+                          <button className="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold py-2 rounded-full text-[10px] md:text-xs transition-colors shadow-sm uppercase tracking-wider">
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                // ২. হোম পেজে ক্যাটাগরি ভিত্তিক স্লাইডিং রো ভিউ
+                (() => {
+                  // শুধুমাত্র প্রোডাক্ট থাকা ক্যাটাগরিগুলোকে আলাদা করা হচ্ছে যাতে সিরিয়াল (rowIndex) ঠিক থাকে
+                  const activeRows = allCategories.map(cat => {
+                    const categoryProducts = products.filter(p => {
+                      const prodCat = p.categories;
+                      if (typeof prodCat === 'string') return prodCat === cat.$id;
+                      if (Array.isArray(prodCat)) return prodCat.some((c: any) => (c.$id === cat.$id || c === cat.$id));
+                      return prodCat?.$id === cat.$id;
+                    });
+                    return { cat, products: categoryProducts };
+                  }).filter(row => row.products.length > 0);
+
+                  // একটি লুপের মাধ্যমে প্রতিটি ক্যাটাগরির জন্য স্লাইডার তৈরি করা হচ্ছে
+                  return activeRows.map((row, index) => (
+                    <CategoryRowSlider 
+                      key={row.cat.$id} 
+                      categoryName={row.cat.name} 
+                      products={row.products} 
+                      rowIndex={index} 
+                    />
+                  ));
+                })()
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-xl p-10 md:p-16 text-center border border-slate-200 flex flex-col items-center justify-center mt-10">
