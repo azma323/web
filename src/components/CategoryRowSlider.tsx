@@ -1,89 +1,34 @@
-import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 interface CategoryRowSliderProps {
   categoryName: string;
   products: any[];
-  rowIndex: number;
 }
 
-export default function CategoryRowSlider({ categoryName, products, rowIndex }: CategoryRowSliderProps) {
-  const [animState, setAnimState] = useState<'idle' | 'sliding-out' | 'hidden-left'>('idle');
-  const [isPaused, setIsPaused] = useState(false);
+export default function CategoryRowSlider({ categoryName, products }: CategoryRowSliderProps) {
   
-  // useRef ব্যবহার করে লেটেস্ট pause স্টেট ট্র্যাক করা হচ্ছে যাতে ইন্টারভালের ভেতর সঠিক ভ্যালু পাওয়া যায়
-  const isPausedRef = useRef(isPaused);
-
-  useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
-
-  useEffect(() => {
-    // সিরিয়াল অনুযায়ী অ্যানিমেশন শুরু করার জন্য ডিলে (rowIndex অনুযায়ী)
-    const delay = rowIndex * 5000; 
-    
-    const timer = setTimeout(() => {
-      // যদি পজ করা না থাকে তবেই প্রথমবার অ্যানিমেশন ট্রিগার হবে
-      if (!isPausedRef.current) {
-        triggerAnimation();
-      }
-
-      const interval = setInterval(() => {
-        // প্রতি ১৫ সেকেন্ড পর পর চেক করবে ইউজার মাউস রেখে দিয়েছেন কি না
-        if (!isPausedRef.current) {
-          triggerAnimation();
-        }
-      }, 15000);
-
-      return () => clearInterval(interval);
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [rowIndex]);
-
-  const triggerAnimation = () => {
-    setAnimState('sliding-out'); 
-    setTimeout(() => {
-      setAnimState('hidden-left'); 
-      setTimeout(() => {
-        setAnimState('idle'); 
-      }, 50);
-    }, 1000);
-  };
-
-  let transformClass = 'translate-x-0 opacity-100 transition-all duration-1000 ease-in-out';
-  if (animState === 'sliding-out') {
-    transformClass = 'translate-x-[120%] opacity-0 transition-all duration-1000 ease-in-out'; 
-  } else if (animState === 'hidden-left') {
-    transformClass = '-translate-x-[120%] opacity-0 transition-none'; 
-  }
-
   if (!products || products.length === 0) return null;
 
   return (
-    <div 
-      className="mb-10 overflow-hidden"
-      // 🔴 ম্যাজিক: মাউস রাখলে অ্যানিমেশন পজ হবে, সরিয়ে নিলে আবার চালু হবে
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-    >
+    <div className="mb-10 w-full">
       <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
         <span className="w-2 h-6 bg-orange-500 rounded-full inline-block"></span>
         {categoryName}
-        {isPaused && (
-          <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest animate-pulse ml-2">
-            (Paused)
-          </span>
-        )}
       </h2>
       
-      <div className="relative overflow-hidden w-full py-2">
-        <div className={`flex gap-3 lg:gap-6 w-full ${transformClass}`}>
+      <div className="relative w-full py-2">
+        {/* 🔴 ম্যাজিক রেসপনসিভ লজিক:
+          - ফোনে (Default): 'flex' এবং 'overflow-x-auto' যা সব প্রোডাক্টকে এক লাইনে রেখে ডানে-বামে সোয়াইপ/স্লাইড করার সুবিধা দেবে।
+          - ডেস্কটপে (md:): 'md:grid' এবং 'md:grid-cols-4' যা প্রতি লাইনে ৪টি প্রোডাক্ট ফিক্সড করে দেবে এবং ৫ নম্বর থেকে পরের লাইনে পাঠাবে।
+        */}
+        <div className="flex md:grid md:grid-cols-4 gap-3 lg:gap-6 w-full overflow-x-auto md:overflow-x-visible snap-x snap-mandatory pb-4 md:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {products.map(product => (
             <Link 
               to={`/product/${product.$id}`} 
               key={product.$id} 
-              className="w-[160px] sm:w-[200px] md:w-[220px] lg:w-[240px] xl:w-[260px] shrink-0 bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full"
+              // ফোনে কার্ডের সাইজ নির্দিষ্ট থাকবে (w-[165px]) যেন স্ক্রল করা যায়। 
+              // ডেস্কটপে (md:) এটি গ্রিডের পুরো জায়গা (md:w-full) নিয়ে নিবে।
+              className="w-[165px] sm:w-[200px] md:w-full shrink-0 md:shrink snap-start bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full"
             >
               <div className="aspect-square bg-white relative p-2 md:p-4 flex items-center justify-center border-b border-slate-100">
                 <img 
