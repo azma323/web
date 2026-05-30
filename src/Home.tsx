@@ -202,12 +202,12 @@ function Home() {
                   }).filter(row => row.products.length > 0);
 
                   // একটি লুপের মাধ্যমে প্রতিটি ক্যাটাগরির জন্য স্লাইডার তৈরি করা হচ্ছে
-                  return activeRows.map((row, index) => (
+                  return activeRows.map((row) => (
                     <CategoryRowSlider 
                       key={row.cat.$id} 
                       categoryName={row.cat.name} 
                       products={row.products} 
-                      rowIndex={index} 
+                    
                     />
                   ));
                 })()
