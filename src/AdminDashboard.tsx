@@ -15,7 +15,7 @@ interface RequestItem {
   total_price: number; $createdAt: string;
 }
 
-// 🔴 ম্যাজিক ফিক্স: বাগ-ফ্রি এবং সুপার ফাস্ট ইমেজ কম্প্রেসার
+// 🔴 ম্যাজিক ফিক্স: বাগ-ফ্রি এবং সুপার ফাস্ট ইমেজ কম্প্রেসার (অপরিবর্তিত রাখা হয়েছে)
 const cropAndCompressImage = async (file: File, targetSize = 1000, quality = 0.8): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -75,7 +75,7 @@ function AdminDashboard() {
   // Category Form State
   const [catName, setCatName] = useState('');
   const [catParentId, setCatParentId] = useState(''); 
-  const [editingCatId, setEditingCatId] = useState<string | null>(null); // 🔴 নতুন: ক্যাটাগরি এডিট স্টেট
+  const [editingCatId, setEditingCatId] = useState<string | null>(null); 
   
   // Product Form State
   const [pTitle, setPTitle] = useState('');
@@ -83,12 +83,14 @@ function AdminDashboard() {
   const [pDesc, setPDesc] = useState('');
   const [pYoutube, setPYoutube] = useState('');
   const [pCatId, setPCatId] = useState('');
+  
+  // 🔴 নতুন ইমেজ গ্রিডের জন্য স্টেট
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const fetchData = async () => {
     try {
-      // 🔴 লিমিট ফিক্স: Query.limit ব্যবহার করা হয়েছে যাতে ২৫টার পর ডেটা হারানো না যায়
       const [catRes, prodRes, reqRes] = await Promise.all([
         databases.listDocuments(DATABASE_ID, CATEGORY_COLLECTION_ID, [Query.limit(100)]),
         databases.listDocuments(DATABASE_ID, PRODUCT_COLLECTION_ID, [Query.limit(500)]),
@@ -114,7 +116,6 @@ function AdminDashboard() {
     window.location.replace('/'); 
   };
 
-  // 🔴 ম্যাজিক: ক্যাটাগরি ক্রিয়েট এবং আপডেট লজিক একসাথে
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catName) return alert("Category name required!");
@@ -151,6 +152,7 @@ function AdminDashboard() {
     setCatParentId('');
   };
 
+  // 🔴 আপডেটেড প্রোডাক্ট সেভ লজিক (আগের + নতুন ইমেজ একসাথে)
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pTitle || !pPrice || !pCatId) return alert("Fields required!");
@@ -162,17 +164,22 @@ function AdminDashboard() {
           const originalFile = imageFiles[i];
           const processedFile = await cropAndCompressImage(originalFile); 
           const uploadedFile = await storage.createFile(BUCKET_ID, ID.unique(), processedFile);
-          
-          // 🔴 ম্যাজিক: WebP ফরম্যাটে দ্রুত লোড হওয়ার কনফিগারেশন
-          // 🔴 ম্যাজিক: আগের সিম্পল ভিউ মেথডটিই ব্যবহার করা হলো, যা যেকোনো ভার্সনে ১০০% কাজ করবে
-const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
-          
+          const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
           uploadedImageUrls.push(fileUrl);
         }
       }
 
+      // আগের ছবি এবং নতুন আপলোড করা ছবি একত্রিত করা হচ্ছে
+      const finalImages = [...existingImages, ...uploadedImageUrls];
       const productData: any = { title: pTitle, price: Number(pPrice), description: pDesc, youtube_url: pYoutube, categories: pCatId };
-      if (uploadedImageUrls.length > 0) { productData.images = uploadedImageUrls; productData.thumbnail = uploadedImageUrls[0]; }
+      
+      if (finalImages.length > 0) { 
+        productData.images = finalImages; 
+        productData.thumbnail = finalImages[0]; 
+      } else {
+        productData.images = [];
+        productData.thumbnail = null;
+      }
 
       if (editingId) {
         await databases.updateDocument(DATABASE_ID, PRODUCT_COLLECTION_ID, editingId, productData);
@@ -190,13 +197,19 @@ const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
     setEditingId(product.$id); setPTitle(product.title); setPPrice(product.price.toString());
     setPDesc(product.description || ''); setPYoutube(product.youtube_url || '');
     const catId = Array.isArray(product.categories) ? product.categories[0]?.$id : (product.categories?.$id || product.categories);
-    setPCatId(catId); window.scrollTo({ top: 0, behavior: 'smooth' }); 
+    setPCatId(catId); 
+    
+    // এডিট করার সময় ডেটাবেস থেকে আগের ছবিগুলো লোড করা হচ্ছে
+    setExistingImages(product.images || (product.thumbnail ? [product.thumbnail] : []));
+    setImageFiles([]); // নতুন ফাইলের স্টেট ক্লিয়ার করা হলো
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
   const cancelEdit = () => {
-    setEditingId(null); setPTitle(''); setPPrice(''); setPDesc(''); setPYoutube(''); setPCatId(''); setImageFiles([]);
-    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if (fileInput) fileInput.value = '';
+    setEditingId(null); setPTitle(''); setPPrice(''); setPDesc(''); setPYoutube(''); setPCatId(''); 
+    setImageFiles([]); 
+    setExistingImages([]); // ক্যান্সেল করলে ইমেজ ক্লিয়ার হবে
   };
 
   const handleDelete = async (colId: string, docId: string) => {
@@ -252,7 +265,7 @@ const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
     <div className="min-h-screen bg-slate-100 flex font-sans text-slate-900">
       
       {/* 🌟 Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl z-20 hidden md:flex">
+      <aside className="w-64 bg-slate-900 text-white  flex-col shadow-2xl z-20 hidden md:flex">
         <div className="p-8 border-b border-slate-800">
           <h2 className="text-2xl font-black tracking-tighter text-orange-500 uppercase">BDT Admin</h2>
         </div>
@@ -450,42 +463,62 @@ const fileUrl = storage.getFileView(BUCKET_ID, uploadedFile.$id).toString();
                       
                       <input type="text" value={pYoutube} onChange={(e) => setPYoutube(e.target.value)} placeholder="YouTube Video URL (Optional)" className="px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white" />
                       
+                      {/* 🌟 Smart Image Grid UI */}
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-black uppercase text-slate-400 mb-2 ml-1">
-                          Upload Images (Select one by one or multiple) {editingId && <span className="text-orange-500 lowercase normal-case">- leave empty to keep existing</span>}
+                        <label className="block text-xs font-black uppercase text-slate-400 mb-3 ml-1">
+                          Product Images (Manage one by one)
                         </label>
-                        <input 
-                          id="image-upload" 
-                          type="file" 
-                          multiple 
-                          accept="image/*" 
-                          onChange={(e) => {
-                            if (e.target.files) {
-                              const newFiles = Array.from(e.target.files);
-                              setImageFiles(prev => [...prev, ...newFiles]);
-                              e.target.value = ''; 
-                            }
-                          }} 
-                          className="w-full px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100" 
-                        />
+                        
+                        <div className="flex gap-4 flex-wrap bg-slate-50 border-2 border-slate-100 p-4 rounded-xl items-center">
+                          
+                          {/* ১. আগে থেকে থাকা ছবিগুলো (Existing Images) */}
+                          {existingImages.map((imgUrl, idx) => (
+                            <div key={`existing-${idx}`} className="relative w-24 h-24 border-2 border-slate-200 rounded-xl overflow-hidden group shadow-sm bg-white">
+                              <img src={imgUrl} alt="existing" className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => setExistingImages(prev => prev.filter((_, i) => i !== idx))} 
+                                className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-all shadow-md z-10"
+                                title="Remove Existing Image"
+                              >✕</button>
+                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-all pointer-events-none"></div>
+                            </div>
+                          ))}
 
-                        {imageFiles.length > 0 && (
-                          <div className="flex gap-4 flex-wrap mt-4 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
-                            {imageFiles.map((file, idx) => (
-                              <div key={idx} className="relative w-24 h-24 border-2 border-slate-200 rounded-xl overflow-hidden group shadow-sm bg-white">
-                                <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
-                                <button 
-                                  type="button" 
-                                  onClick={() => setImageFiles(prev => prev.filter((_, i) => i !== idx))} 
-                                  className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-all shadow-md"
-                                  title="Remove Image"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                          {/* ২. নতুন সিলেক্ট করা ছবিগুলো (New Selected Files) */}
+                          {imageFiles.map((file, idx) => (
+                            <div key={`new-${idx}`} className="relative w-24 h-24 border-2 border-orange-200 rounded-xl overflow-hidden group shadow-sm bg-white">
+                              <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
+                              <span className="absolute bottom-0 left-0 right-0 bg-orange-500 text-white text-[9px] font-bold text-center py-0.5 z-10 uppercase tracking-widest">New</span>
+                              <button 
+                                type="button" 
+                                onClick={() => setImageFiles(prev => prev.filter((_, i) => i !== idx))} 
+                                className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-all shadow-md z-10"
+                                title="Remove New Image"
+                              >✕</button>
+                            </div>
+                          ))}
+
+                          {/* ৩. নতুন ছবি যোগ করার বাটন (+ Button) */}
+                          <label className="w-24 h-24 border-2 border-dashed border-slate-300 hover:border-orange-500 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-orange-50 transition-all text-slate-400 hover:text-orange-500 group shadow-sm bg-white">
+                            <span className="text-3xl font-light mb-1 group-hover:scale-110 transition-transform">+</span>
+                            <span className="text-[9px] font-black uppercase tracking-widest">Add Photo</span>
+                            <input 
+                              type="file" 
+                              multiple 
+                              accept="image/*" 
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files) {
+                                  const newFiles = Array.from(e.target.files);
+                                  setImageFiles(prev => [...prev, ...newFiles]);
+                                  e.target.value = ''; // ইনপুট রিসেট
+                                }
+                              }} 
+                            />
+                          </label>
+                          
+                        </div>
                       </div>
                       
                       <textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="Detailed Description..." className="md:col-span-2 px-5 py-4 rounded-xl border-2 border-slate-100 outline-none focus:border-orange-500 bg-white min-h-[120px]" />
